@@ -1,0 +1,47 @@
+salesforce_to_raw_tables:
+  - base_table: accounts
+    load_frequency: "@daily"
+    api_name: Account
+  - base_table: cases
+    load_frequency: "@daily"
+    api_name: Case
+  - base_table: contacts
+    load_frequency: "@daily"
+    api_name: Contact
+  - base_table: events
+    load_frequency: "@daily"
+    api_name: Event
+  - base_table: leads
+    load_frequency: "@daily"
+    api_name: Lead
+  - base_table: opportunities
+    load_frequency: "@daily"
+    api_name: Opportunity
+  - base_table: record_types
+    load_frequency: "@once"
+    api_name: RecordType
+  - base_table: tasks
+    load_frequency: "@daily"
+    api_name: Task
+  - base_table: users
+    load_frequency: "@daily"
+    api_name: User
+raw_to_cdc_tables:
+  - base_table: accounts
+    load_frequency: "@daily"
+  - base_table: cases
+    load_frequency: "@daily"
+  - base_table: contacts
+    load_frequency: "@daily"
+  - base_table: events
+    load_frequency: "@daily"
+  - base_table: leads
+    load_frequency: "@daily"
+  - base_table: opportunities
+    load_frequency: "@daily"
+  - base_table: record_types
+    load_frequency: "@once"
+  - base_table: tasks
+    load_frequency: "@daily"
+  - base_table: users
+    load_frequency: "@daily"

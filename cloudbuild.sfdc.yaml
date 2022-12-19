@@ -1,0 +1,83 @@
+#-- Copyright 2022 Google LLC
+#--
+#-- Licensed under the Apache License, Version 2.0 (the "License");
+#-- you may not use this file except in compliance with the License.
+#-- You may obtain a copy of the License at
+#--
+#--     https://www.apache.org/licenses/LICENSE-2.0
+#--
+#-- Unless required by applicable law or agreed to in writing, software
+#-- distributed under the License is distributed on an "AS IS" BASIS,
+#-- WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#-- See the License for the specific language governing permissions and
+#-- limitations under the License.
+
+# This build file generates all the necessary obejcts (DAG files, Bigquery
+# tables and views etc) for a Cortex deployment for a Salesforce system.
+
+# Input parameters:
+#   _GCS_LOGS_BUCKET : An existing GCS bucket where build logs will be written.
+#   _TGT_BUCKET : An existing GCS bucket where generated files related to
+#                 Airflow DAGs(DAG py file, dependencies, DAG sql file etc)
+#                 will be copied over to.
+
+steps:
+  # RAW DAG generation
+  - name: 'gcr.io/kittycorn-public/deploy-kittycorn-cdc:v1.5'
+    id: raw_dag_generator
+    entrypoint: /bin/bash
+    waitFor: ['-']
+    args:
+    - -c
+    - |
+      export PYTHONPATH=$$PYTHONPATH:./src
+      python src/raw_dag_generator/generate_dags.py
+
+
+  # CDC DAG generation
+  - name: 'gcr.io/kittycorn-public/deploy-kittycorn-cdc:v1.5'
+    id: cdc_dag_generator
+    waitFor: ['raw_dag_generator']
+    entrypoint: /bin/bash
+    args:
+    - -c
+    - |
+      export PYTHONPATH=$$PYTHONPATH:./src
+      python src/cdc_dag_generator/generate_dags.py
+
+
+  # Copy generated DAG sql files to Target GCS bucket
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk:slim'
+    id: copy_dag_sql_files_to_gcs
+    waitFor: ['cdc_dag_generator']
+    entrypoint: "bash"
+    args:
+      - "-c"
+      - |-
+        gsutil -m cp -r 'generated_sql/*.sql' gs://${_TGT_BUCKET}/data/bq_data_replication
+
+  # Copy generated DAG python and related files to Target GCS bucket
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk:slim'
+    id: copy_dag_py_files_to_gcs
+    waitFor: ['copy_dag_sql_files_to_gcs']
+    entrypoint: /bin/bash
+    args:
+      - -c
+      - |
+        gsutil -m cp -r './generated_dag/*' gs://'${_TGT_BUCKET}'/dags
+
+
+  #  Deploy Reporting related BQ views and functions.
+  - name: gcr.io/cloud-builders/gcloud
+    id: deploy_reporting
+    entrypoint: "bash"
+    args:
+      - "-c"
+      - |-
+        gcloud builds submit --config=src/reporting/cloudbuild.reporting.yaml \
+            --substitutions _GCS_LOGS_BUCKET='${_GCS_LOGS_BUCKET}'
+
+logsBucket: "gs://$_GCS_LOGS_BUCKET"
+timeout: 10200s
+options:
+  substitution_option: "ALLOW_LOOSE"

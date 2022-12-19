@@ -1,0 +1,20 @@
+steps:
+
+{%- for build_file in build_files %}
+  - name: gcr.io/kittycorn-public/deploy-kittycorn:v1.5
+    {%- if not build_file.wait_for_prev_step %}
+    waitFor: ['-']
+    {%- endif %}
+    entrypoint: "bash"
+    args:
+      - "-c"
+      - |-
+        echo "Executing {{ build_file.sql_file_name }}"
+        ./create_view.sh "{{ build_file.sql_file_name }}" "{{ location }}" generated_reporting_files/bq_sql_jinja_data.json
+{% endfor %}
+
+timeout: 15000s
+logsBucket: "gs://$_GCS_LOGS_BUCKET"
+options:
+  substitution_option: "ALLOW_LOOSE"
+  machineType: "E2_HIGHCPU_32"
