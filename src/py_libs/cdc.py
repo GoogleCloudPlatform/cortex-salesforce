@@ -18,9 +18,6 @@ import logging
 from google.cloud.exceptions import NotFound
 from google.cloud import bigquery
 
-# Columns to be ignored for CDC tables
-_CDC_EXCLUDED_COLUMN_LIST = ["_PARTITIONTIME", "OperationalFlag", "IsDeleted"]
-
 # Supported partition types.
 _PARTITION_TYPES = ["time", "integer_range"]
 
@@ -224,8 +221,7 @@ def validate_partition_columns(partition_details, target_schema):
         raise Exception(e_msg) from None
 
 
-def create_cdc_table(table_setting, raw_project, raw_dataset, cdc_project,
-                     cdc_dataset):
+def create_cdc_table(table_setting, cdc_project, cdc_dataset, schema):
     """Creates CDC table based on source RAW table schema.
 
     Retrieves schema details from source table in RAW dataset and creates a
@@ -233,36 +229,28 @@ def create_cdc_table(table_setting, raw_project, raw_dataset, cdc_project,
 
     Args:
         table_setting: Table config as defined in the settings file.
-        raw_project: BQ Raw project.
-        raw_dataset: BQ Raw dataset name.
         cdc_project: BQ CDC project.
         cdc_dataset: BQ CDC dataset name.
+        schema: CDC table schema as a list of tuples (column name, column type)
     """
 
     client = bigquery.Client()
 
-    base_table = table_setting["base_table"].lower()
-    raw_table_name = raw_project + "." + raw_dataset + "." + base_table
+    base_table: str = table_setting["base_table"].lower()
     cdc_table_name = cdc_project + "." + cdc_dataset + "." + base_table
     partition_details = table_setting.get("partition_details")
     cluster_details = table_setting.get("cluster_details")
 
     try:
-        client.get_table(cdc_table_name)
+        _ = client.get_table(cdc_table_name)
         logging.warning("Table '%s' already exists. Not creating it again.",
                         cdc_table_name)
     except NotFound:
         # Let's create CDC table.
         logging.info("Table '%s' does not exists. Creating it.", cdc_table_name)
-        try:
-            raw_table_schema = client.get_table(raw_table_name).schema
-        except NotFound:
-            e_msg = (f"RAW Table '{raw_table_name}' does not exist.")
-            raise Exception(e_msg) from None
 
         target_schema = [
-            field for field in raw_table_schema
-            if field.name not in _CDC_EXCLUDED_COLUMN_LIST
+            bigquery.SchemaField(name=f[0], field_type=f[1]) for f in schema
         ]
 
         cdc_table = bigquery.Table(cdc_table_name, schema=target_schema)
@@ -291,6 +279,6 @@ def create_cdc_table(table_setting, raw_project, raw_dataset, cdc_project,
             validate_cluster_columns(cluster_details, target_schema)
             cdc_table.clustering_fields = cluster_details["columns"]
 
-        client.create_table(cdc_table)
+        _ = client.create_table(cdc_table)
 
         logging.info("Created table '%s'.", cdc_table_name)

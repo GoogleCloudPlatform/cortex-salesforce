@@ -1,21 +1,26 @@
 {
-    "testData" : true,
-    "generateExtraData" : true,
-    "deployCDC" : true,
-    "deploySAP" : true,
-    "deploySFDC" : true,
-    "turboMode" : true,
-    "projectIdSource" : "",
-    "projectIdTarget" : "",
-    "location" : "US",
-    "languages" : ["E", "S"],
-    "currencies" : ["USD"],
-    "SFDC" : {
-        "datasets" : {
-            "cdc" : "",
-            "raw" : "",
-            "reporting" : "REPORTING"
+    "testData": true,
+    "generateExtraData": true,
+    "deployCDC": true,
+    "deploySAP": true,
+    "deploySFDC": true,
+    "turboMode": true,
+    "projectIdSource": "",
+    "projectIdTarget": "",
+    "location": "US",
+    "languages": [
+        "E",
+        "S"
+    ],
+    "currencies": [
+        "USD"
+    ],
+    "SFDC": {
+        "createMappingViews": true,
+        "datasets": {
+            "cdc": "",
+            "raw": "",
+            "reporting": "REPORTING"
         }
     }
-
 }

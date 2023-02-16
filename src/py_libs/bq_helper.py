@@ -14,14 +14,40 @@
 #
 """Library for BigQuery related functions."""
 
+import logging
+
+from google.cloud.exceptions import NotFound
 from google.cloud import bigquery
 
 client = bigquery.Client()
 
 
-def execute_sql_file(sql_file):
+def execute_sql_file(sql_file, log_sql=False):
     """Executes a Bigquery sql file."""
     with open(sql_file, mode="r", encoding="utf-8") as sqlf:
-        query_job = client.query(sqlf.read())
+        sql_str = sqlf.read()
+        if log_sql:
+            logging.info("Executing SQL: %s", sql_str)
+        query_job = client.query(sql_str)
         # Let's wait for query to complete.
         _ = query_job.result()
+
+
+def table_exists(full_table_name) -> bool:
+    """Checks if a BigQuery table exists."""
+    try:
+        _ = client.get_table(full_table_name)
+        return True
+    except NotFound:
+        return False
+
+
+def create_table(full_name, schema_tuples_list, exists_ok=False):
+    """Create a BigQuery table"""
+    project, dataset_id, table_id = full_name.split(".")
+    table_ref = bigquery.TableReference(
+        bigquery.DatasetReference(project, dataset_id), table_id)
+    table = bigquery.Table(
+        table_ref,
+        schema=[bigquery.SchemaField(t[0], t[1]) for t in schema_tuples_list])
+    client.create_table(table, exists_ok=exists_ok)

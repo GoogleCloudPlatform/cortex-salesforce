@@ -28,20 +28,38 @@ salesforce_to_raw_tables:
     api_name: User
 raw_to_cdc_tables:
   - base_table: accounts
+    raw_table: accounts
+    api_name: Account
     load_frequency: "@daily"
   - base_table: cases
+    raw_table: cases
+    api_name: Case
     load_frequency: "@daily"
   - base_table: contacts
+    raw_table: contacts
+    api_name: Contact
     load_frequency: "@daily"
   - base_table: events
+    raw_table: events
+    api_name: Event
     load_frequency: "@daily"
   - base_table: leads
+    raw_table: leads
+    api_name: Lead
     load_frequency: "@daily"
   - base_table: opportunities
+    raw_table: opportunities
+    api_name: Opportunity
     load_frequency: "@daily"
   - base_table: record_types
+    raw_table: record_types
+    api_name: RecordType
     load_frequency: "@once"
   - base_table: tasks
+    raw_table: tasks
+    api_name: Task
     load_frequency: "@daily"
   - base_table: users
+    raw_table: users
+    api_name: User
     load_frequency: "@daily"

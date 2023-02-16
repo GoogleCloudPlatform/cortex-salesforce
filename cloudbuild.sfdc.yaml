@@ -1,4 +1,4 @@
-#-- Copyright 2022 Google LLC
+#-- Copyright 2023 Google LLC
 #--
 #-- Licensed under the Apache License, Version 2.0 (the "License");
 #-- you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 #-- See the License for the specific language governing permissions and
 #-- limitations under the License.
 
-# This build file generates all the necessary obejcts (DAG files, Bigquery
+# This build file generates all the necessary objects (DAG files, Bigquery
 # tables and views etc) for a Cortex deployment for a Salesforce system.
 
 # Input parameters:
@@ -20,62 +20,68 @@
 #   _TGT_BUCKET : An existing GCS bucket where generated files related to
 #                 Airflow DAGs(DAG py file, dependencies, DAG sql file etc)
 #                 will be copied over to.
+#   _DEPLOY_CDC : Whether to deploy CDC DAGs, true or false.
 
 steps:
-  # RAW DAG generation
-  - name: 'gcr.io/kittycorn-public/deploy-kittycorn-cdc:v1.5'
-    id: raw_dag_generator
-    entrypoint: /bin/bash
-    waitFor: ['-']
-    args:
-    - -c
-    - |
-      export PYTHONPATH=$$PYTHONPATH:./src
-      python src/raw_dag_generator/generate_dags.py
-
-
-  # CDC DAG generation
-  - name: 'gcr.io/kittycorn-public/deploy-kittycorn-cdc:v1.5'
-    id: cdc_dag_generator
-    waitFor: ['raw_dag_generator']
+  - name: 'gcr.io/kittycorn-public/deploy-kittycorn:v2.0'
     entrypoint: /bin/bash
     args:
     - -c
     - |
+      set -e
       export PYTHONPATH=$$PYTHONPATH:./src
-      python src/cdc_dag_generator/generate_dags.py
+      export create_mapping_views=$(cat 'config/sfdc_config.json' | python -c "import json,sys; print(str(json.load(sys.stdin)['SFDC']['createMappingViews']).lower())" 2>/dev/null || echo true)
+      if [[ "$_DEPLOY_CDC" == "true" ]]
+      then
+        # RAW DAG generation
+        echo "Generating Raw DAGs and SQL files."
+        python src/raw_dag_generator/generate_dags.py
+        echo "✅ Generated Raw DAGs and SQL files."
+        # If create_mapping_views is true, we won't create CDC DAGs.
+        if [[ "${create_mapping_views}" != "true" ]]
+        then
+          # CDC DAG generation
+          echo "Generating CDC DAGs and SQL files."
+          python src/cdc_dag_generator/generate_dags.py
+          echo "✅ Generated CDC DAGs and SQL files."
+        fi
+        # Copy generated DAG sql files to Target GCS bucket
+        generated_files=$(shopt -s nullglob dotglob; echo generated_sql/*.sql)
+        if (( ${#generated_files} ))
+        then
+          echo "Copying SQL files to gs://${_TGT_BUCKET}/data/bq_data_replication."
+          gsutil -m cp -r 'generated_sql/*.sql' gs://${_TGT_BUCKET}/data/bq_data_replication
+          echo "✅ SQL files have been copied."
+        else
+          echo "🔪🔪🔪No SQL files found under generated_sql folder or the folder does not exist. Skipping copy.🔪🔪🔪"
+        fi
+        # Copy generated DAG python and related files to Target GCS bucket
+        generated_files=$(shopt -s nullglob dotglob; echo ./generated_dag/*)
+        if (( ${#generated_files} ))
+        then
+          echo "Copying DAG files to gs://${_TGT_BUCKET}/dags."
+          gsutil -m cp -r './generated_dag/*' gs://'${_TGT_BUCKET}'/dags
+          echo "✅ DAG files have been copied."
+        else
+          echo "🔪🔪🔪No Python files found under generated_dag folder or the folder does not exist. Skipping copy.🔪🔪🔪"
+        fi
+      fi
+      # If create_mapping_views is true, we create CDC views.
+      if [[ "${create_mapping_views}" == "true" ]]
+      then
+        # CDC view generation
+        echo "Generating CDC views."
+        python src/cdc_dag_generator/generate_views.py
+        echo "✅ CDC views have been generated."
+      fi
 
-
-  # Copy generated DAG sql files to Target GCS bucket
-  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk:slim'
-    id: copy_dag_sql_files_to_gcs
-    waitFor: ['cdc_dag_generator']
-    entrypoint: "bash"
-    args:
-      - "-c"
-      - |-
-        gsutil -m cp -r 'generated_sql/*.sql' gs://${_TGT_BUCKET}/data/bq_data_replication
-
-  # Copy generated DAG python and related files to Target GCS bucket
-  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk:slim'
-    id: copy_dag_py_files_to_gcs
-    waitFor: ['copy_dag_sql_files_to_gcs']
+  # Generate SFDC Reporting bigquery views and fucntions.
+  - name: "gcr.io/kittycorn-public/deploy-kittycorn:v2.0"
     entrypoint: /bin/bash
     args:
-      - -c
-      - |
-        gsutil -m cp -r './generated_dag/*' gs://'${_TGT_BUCKET}'/dags
-
-
-  #  Deploy Reporting related BQ views and functions.
-  - name: gcr.io/cloud-builders/gcloud
-    id: deploy_reporting
-    entrypoint: "bash"
-    args:
-      - "-c"
-      - |-
-        gcloud builds submit --config=src/reporting/cloudbuild.reporting.yaml \
-            --substitutions _GCS_LOGS_BUCKET='${_GCS_LOGS_BUCKET}'
+    - -c
+    - |
+      src/reporting/deploy.sh "${_GCS_LOGS_BUCKET}"
 
 logsBucket: "gs://$_GCS_LOGS_BUCKET"
 timeout: 10200s

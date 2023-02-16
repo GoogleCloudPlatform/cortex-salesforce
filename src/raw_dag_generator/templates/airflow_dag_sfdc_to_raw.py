@@ -16,16 +16,17 @@
 # type: ignore
 
 from datetime import datetime, timedelta
+import importlib
+import os
+
 from airflow import DAG
 from airflow.operators.python_operator import PythonOperator
 from airflow.operators.dummy_operator import DummyOperator
-import os
-import importlib
 
 # Use dynamic import to account for Airflow directory structure limitations.
 _THIS_DIR = os.path.dirname(os.path.realpath(__file__))
 _DEPENDENCIES_LIB_PATH = (
-    os.path.join(_THIS_DIR, "sfdc_dag_dependencies.salesforce_to_bigquery")
+    os.path.join(_THIS_DIR, "sfdc_dag_dependencies.airflow_sfdc2bq")
     .replace("/home/airflow/gcs/dags/", "")
     .replace("/", ".")
 )
@@ -54,7 +55,6 @@ with DAG(
     extract_data = PythonOperator(
         task_id="sfdc_to_raw_${base_table}",
         python_callable=sfdc_to_bigquery_module
-                            .SalesforceToBigquery
                             .extract_data_from_sfdc,
         op_args = [
             # TODO: Load this Salesforce connection name from some config.
@@ -64,8 +64,7 @@ with DAG(
             "sfdc_cdc_bq",
             "${project_id}",
             "${raw_dataset}",
-            "${base_table}",
-            os.path.join(_THIS_DIR, "sfdc_table_schema/${base_table}.csv")],
+            "${base_table}"],
         dag=dag,
     )
     stop_task = DummyOperator(task_id="stop")

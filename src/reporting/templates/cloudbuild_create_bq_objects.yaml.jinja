@@ -1,7 +1,7 @@
 steps:
 
 {%- for build_file in build_files %}
-  - name: gcr.io/kittycorn-public/deploy-kittycorn:v1.5
+  - name: gcr.io/kittycorn-public/deploy-kittycorn:v2.0
     {%- if not build_file.wait_for_prev_step %}
     waitFor: ['-']
     {%- endif %}

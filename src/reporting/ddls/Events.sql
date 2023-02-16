@@ -13,7 +13,7 @@
 #-- limitations under the License.
 
 CREATE OR REPLACE VIEW `{{ project_id_tgt }}.{{ dataset_reporting_tgt_sfdc }}.Events`
-  OPTIONS(description = 'View for Event Table')
+OPTIONS(description = 'View for Event Table')
 AS (
   SELECT
     Events.EventId,
@@ -29,7 +29,6 @@ AS (
     Events.EventSubtype,
     Events.GroupEventType,
     Events.IsAllDayEvent,
-    Events.IsArchived,
     Events.IsChild,
     Events.IsGroupEvent,
     Events.IsPrivate,

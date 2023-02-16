@@ -16,12 +16,14 @@ Generates DAG and related files needed to copy/move Salesforce data from
 RAW dataset to CDC dataset.
 """
 
+import csv
 import datetime
 import json
 import logging
 import sys
 import yaml
 from pathlib import Path
+import typing
 
 from py_libs.bq_helper import execute_sql_file
 from py_libs.cdc import create_cdc_table
@@ -40,6 +42,7 @@ _CONFIG_FILE = Path(_THIS_DIR, "../../config/sfdc_config.json")
 _SETTINGS_FILE = Path(_THIS_DIR, "../../config/setting.yaml")
 
 _GENERATED_FILE_PREFIX = "sfdc_raw_to_cdc_"
+_TEMPLATE_SQL_NAME = "template"
 
 # Directory under which all the generated dag files and related files
 # will be created.
@@ -59,14 +62,62 @@ def process_table(table_setting, raw_project, raw_dataset, cdc_project,
     dag and related files. """
 
     base_table = table_setting["base_table"].lower()
+    raw_table = table_setting["raw_table"]
+    api_name = table_setting["api_name"]
+
+    schema_file = Path(_THIS_DIR,
+                       f"../table_schema/{base_table}.csv").absolute()
 
     logging.info("__ Processing table '%s' __", base_table)
+
+    sfdc_to_bq_field_map: typing.Dict[str, typing.Tuple[str, str]] = {}
+
+    # TODO: Check Config File schema.
+    with open(
+            schema_file,
+            encoding="utf-8",
+            newline="",
+    ) as csv_file:
+        for row in csv.DictReader(csv_file, delimiter=","):
+            sfdc_to_bq_field_map[row["SourceField"]] = (row["TargetField"],
+                                                        row["DataType"])
+    source_fields_lower = [f.lower() for f in sfdc_to_bq_field_map]
+    target_fields_lower = [f[0].lower() for f in sfdc_to_bq_field_map.values()]
+
+    # Making sure important fields are in the destination.
+    # Work on Id field first.
+    if "id" not in source_fields_lower:
+        # No Id field in Raw. Trying to one via the target name
+        # which is supposed to be {api_name}Id
+        id_name = "f{api_name}id".lower()
+        if id_name in target_fields_lower:
+            id_index = target_fields_lower.index(id_name)
+        else:
+            raise ValueError(
+                (f"Cannot find the Id field for {base_table}. "
+                 f"It must be mapped to {api_name}Id field in CDC."))
+    else:
+        id_index = source_fields_lower.index("id")
+    source_id_field_name = list(sfdc_to_bq_field_map.keys())[id_index]
+    id_field_name = sfdc_to_bq_field_map[source_id_field_name][0]
+    # Work on SystemModstamp.
+    if "systemmodstamp" not in source_fields_lower:
+        if "systemmodstamp" in target_fields_lower:
+            sms_index = target_fields_lower.index("systemmodstamp")
+        else:
+            raise ValueError(
+                (f"Cannot find the SystemModstamp field for {base_table}. "
+                 "It must be mapped to SystemModstamp field in CDC."))
+    else:
+        sms_index = source_fields_lower.index("systemmodstamp")
+    source_sms_field_name = list(sfdc_to_bq_field_map.keys())[sms_index]
+    sms_field_name = sfdc_to_bq_field_map[source_sms_field_name][0]
 
     # Create CDC table if needed.
     #############################
     try:
-        create_cdc_table(table_setting, raw_project, raw_dataset, cdc_project,
-                         cdc_dataset)
+        create_cdc_table(table_setting, cdc_project, cdc_dataset,
+                         list(sfdc_to_bq_field_map.values()))
     except Exception as e:
         logging.error("Failed while processing table '%s'.\n"
                       "ERROR: %s", base_table, str(e))
@@ -96,24 +147,35 @@ def process_table(table_setting, raw_project, raw_dataset, cdc_project,
 
     # SQL file generation
     #########################
+    sql_template_file_name = (_GENERATED_FILE_PREFIX + _TEMPLATE_SQL_NAME +
+                              ".sql")
     sql_file_name = (_GENERATED_FILE_PREFIX + base_table.replace(".", "_") +
                      ".sql")
-    sql_template_file = Path(_SQL_TEMPLATE_DIR, sql_file_name)
+    sql_template_file = Path(_SQL_TEMPLATE_DIR, sql_template_file_name)
     output_sql_file = Path(_GENERATED_DAG_SQL_DIR, sql_file_name)
 
+    field_assignments = [
+        f"`{f[0]}` AS `{f[1][0]}`" for f in sfdc_to_bq_field_map.items()
+    ]
+    target_fields = [f"`{f[0]}`" for f in sfdc_to_bq_field_map.values()]
+
     sql_subs = {
-        "source_table": raw_project + "." + raw_dataset + "." + base_table,
-        "target_table": cdc_project + "." + cdc_dataset + "." + base_table
+        "source_table": raw_project + "." + raw_dataset + "." + raw_table,
+        "target_table": cdc_project + "." + cdc_dataset + "." + base_table,
+        "source_id": source_id_field_name,
+        "target_id": id_field_name,
+        "source_systemmodstamp": source_sms_field_name,
+        "target_systemmodstamp": sms_field_name,
+        "target_fields": ",".join(target_fields),
+        "field_assignments": ",".join(field_assignments)
     }
 
-    # TODO:Generate sql files from a common template, instead of individual
-    # templates.
     generate_file_from_template(sql_template_file, output_sql_file, **sql_subs)
-    logging.info("Generated dag sql files")
+    logging.info("Generated DAG SQL file.")
 
     # If test data is needed, we want to populate the CDC table from data in
     # the RAW tables. Let's use the DAG SQL file to do that.
-    if load_test_data:
+    if str(load_test_data).lower() == "true":
         try:
             execute_sql_file(output_sql_file)
             logging.info("Populated CDC table with test data.")
@@ -164,7 +226,7 @@ def main():
 
     if not Path(_SETTINGS_FILE).is_file():
         logging.warning(
-            "️File '%s' does not exist. Skipping CDC DAG generation.",
+            "File '%s' does not exist. Skipping CDC DAG generation.",
             _SETTINGS_FILE)
         sys.exit()
 

@@ -12,3 +12,7 @@ ddls/CaseManagement.sql
 ddls/LeadsCaptureConversions.sql
 ddls/OpportunityPipeline.sql
 ddls/SalesActivities.sql
+ddls/CaseManagementOverview.sql
+ddls/LeadsCaptureConversionsOverview.sql
+ddls/OpportunityPipelineOverview.sql
+ddls/SalesActivitiesOverview.sql

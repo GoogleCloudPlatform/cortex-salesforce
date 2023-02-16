@@ -32,9 +32,11 @@ REPORTING_DIR="${SRC_DIR}"/reporting
 echo "THIS_DIR = ${THIS_DIR}"
 echo "SRC_DIR = ${SRC_DIR}"
 echo "REPORTING_DIR = ${REPORTING_DIR}"
-export PYTHONPATH=$PYTHONPATH:"${SRC_DIR}"
-python3 "$THIS_DIR"/generate_build_files.py
 
+export PYTHONPATH=$PYTHONPATH:"${SRC_DIR}"
+
+# Generate Actual Build files that will create reporting BQ views.
+python3 "$THIS_DIR"/generate_build_files.py
 echo "Build files generated successfully."
 
 # We may have one or more build files. Let's run all of them.

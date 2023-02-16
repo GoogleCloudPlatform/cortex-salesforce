@@ -21,7 +21,6 @@ from jinja2 import Environment, FileSystemLoader
 from pathlib import Path
 
 from google.cloud import bigquery
-from google.cloud.exceptions import NotFound
 
 from py_libs.configs import load_config_file
 
@@ -95,7 +94,10 @@ def _create_build_files(config_dict):
         file_entries = [line.strip() for line in df]
 
     location = config_dict["location"]
-    wait_for_prev_step = False
+
+    # In Turbo Mode, we want to execute certain steps in parallel.
+    # Otherwise, every step is going to be serially executed.
+    wait_for_prev_step = not config_dict["turboMode"]
 
     # Create a list containing entry for each sql file and it's parameters
     # that can be used with Jinja to create needed build files.

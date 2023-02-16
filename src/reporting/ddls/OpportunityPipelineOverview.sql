@@ -1,80 +1,49 @@
--- SELECT
--- SUM(CountOfOpportunities),
--- SUM(CountOfOpportunitiesOpen),
--- SUM(CountOfOpportunitiesWon),
--- SUM(CountOfOpportunitiesLost),
--- SUM(ValueTotalOpportunities),
--- SUM(ValueOpenOpportunities),
--- SUM(ValueWonOpportunities),
--- SUM(ValueLostOpportunities),
--- FROM
--- (
-CREATE OR REPLACE VIEW `{{ project_id_tgt }}.{{ dataset_reporting_tgt_sfdc }}.OpportunityPipeline`
-OPTIONS(
-  description = 'Provides information about Opportunity trends and pipeline to do the forcasting'
-)
-AS
-SELECT
-  AccountName,
-  OpportunityOwnerName,
-  AccountBillingCountry AS Country,
-  AccountIndustry AS Industry,
-  OpportunityProbability,
-  --## CORTEX-CUSTOMER If you prefer to use amount in AmountInTarget Currency, uncomment below and
-  --## uncomment currency_conversion in Opportunity
-  -- AmountInTargetCurrency,
-  -- TargetCurrency,
-  DateOfOpportunityCreatedDate,
-  WeekOfOpportunityCreatedDate,
-  MonthOfOpportunityCreatedDate,
-  QuarterOfOpportunityCreatedDate,
-  YearOfOpportunityCreatedDate,
-  DateOfOpportunityClosedDate,
-  WeekOfOpportunityClosedDate,
-  MonthOfOpportunityClosedDate,
-  QuarterOfOpportunityClosedDate,
-  YearOfOpportunityClosedDate,
+#-- Copyright 2022 Google LLC
+#--
+#-- Licensed under the Apache License, Version 2.0 (the "License");
+#-- you may not use this file except in compliance with the License.
+#-- You may obtain a copy of the License at
+#--
+#--     https://www.apache.org/licenses/LICENSE-2.0
+#--
+#-- Unless required by applicable law or agreed to in writing, software
+#-- distributed under the License is distributed on an "AS IS" BASIS,
+#-- WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#-- See the License for the specific language governing permissions and
+#-- limitations under the License.
 
-  COUNT(OpportunityId) AS CountOfOpportunities,
-  COUNT(IF(((OpportunityIsClosed = FALSE)), OpportunityId, NULL)) AS CountOfOpportunitiesOpen,
-  COUNT(IF(((OpportunityIsClosed = TRUE) AND (OpportunityIsWon = TRUE)), OpportunityId, NULL)) AS CountOfOpportunitiesWon,
-  COUNT(IF(((OpportunityIsClosed = TRUE) AND (OpportunityIsWon = FALSE)), OpportunityId, NULL)) AS CountOfOpportunitiesLost,
+/*
+* This view is intended to showcase how KPIs from OpportunityPipeline view are meant to be calculated
+* without the accompanying Looker visualizations.
+*
+* Please note that this is view is INFORMATIONAL ONLY and may be subject to change without
+* notice in upcoming Cortex Data Foundation releases.
+*/
 
-  --COUNT(IF((OpportunityRecordTypeName = 'Cortex Opportunity'), OpportunityId, NULL)) AS CountOfOpportunities,
-  -- COUNT(IF(((OpportunityIsClosed = FALSE) AND (OpportunityRecordTypeName = 'Cortex Opportunity')), OpportunityId, NULL)) AS CountOfOpportunitiesOpen,
-  -- COUNT(IF(((OpportunityIsClosed = TRUE) AND (OpportunityIsWon = TRUE) AND (OpportunityRecordTypeName = 'Cortex Opportunity')), OpportunityId, NULL)) AS CountOfOpportunitiesWon,
-  -- COUNT(IF(((OpportunityIsClosed = TRUE) AND (OpportunityIsWon = FALSE) AND (OpportunityRecordTypeName = 'Cortex Opportunity')), OpportunityId, NULL)) AS CountOfOpportunitiesLost,
-
-  SUM(TotalSaleAmount) AS ValueTotalOpportunities,
-  SUM(IF((OpportunityIsClosed = FALSE), TotalSaleAmount, NULL)) AS ValueOpenOpportunities,
-  SUM(IF(((OpportunityIsClosed = TRUE) AND (OpportunityIsWon = TRUE)), TotalSaleAmount, NULL)) AS ValueWonOpportunities,
-  SUM(IF(((OpportunityIsClosed = TRUE) AND (OpportunityIsWon = FALSE)), TotalSaleAmount, NULL)) AS ValueLostOpportunities
-
-
-
--- SUM(IF((OpportunityRecordTypeName = 'Cortex Opportunity'), TotalSaleAmount, NULL)) AS ValueTotalOpportunities,
-  -- SUM(IF(((OpportunityIsClosed = FALSE) AND (OpportunityRecordTypeName = 'Cortex Opportunity')), TotalSaleAmount, NULL)) AS ValueOpenOpportunities,
-  -- SUM(IF(((OpportunityIsClosed = TRUE) AND (OpportunityIsWon = TRUE) AND (OpportunityRecordTypeName = 'Cortex Opportunity')), TotalSaleAmount, NULL)) AS ValueWonOpportunities,
-  -- SUM(IF(((OpportunityIsClosed = TRUE) AND (OpportunityIsWon = FALSE) AND (OpportunityRecordTypeName = 'Cortex Opportunity')), TotalSaleAmount, NULL)) AS ValueLostOpportunities
-  --SUM(IF((OpportunityRecordTypeName = 'Sales Target'), TargetAmount, NULL)) AS TargetAmount
-
-FROM `{{ project_id_tgt }}.{{ dataset_reporting_tgt_sfdc }}.OpportunityPipeline`
-GROUP BY
-  AccountName,
-  OpportunityOwnerName,
-  Country,
-  Industry,
-  OpportunityProbability,
-  -- AmountInTargetCurrency,
-  -- TargetCurrency,
-  DateOfOpportunityCreatedDate,
-  WeekOfOpportunityCreatedDate,
-  MonthOfOpportunityCreatedDate,
-  QuarterOfOpportunityCreatedDate,
-  YearOfOpportunityCreatedDate,
-  DateOfOpportunityClosedDate,
-  WeekOfOpportunityClosedDate,
-  MonthOfOpportunityClosedDate,
-  QuarterOfOpportunityClosedDate,
-  YearOfOpportunityClosedDate;
--- )
+CREATE OR REPLACE VIEW `{{ project_id_tgt }}.{{ dataset_reporting_tgt_sfdc }}.OpportunityPipelineOverview`
+  OPTIONS(
+    description = 'Provides information about Opportunity trends and pipeline to do the forcasting'
+  )
+AS (
+  SELECT
+    AccountName,
+    OpportunityOwnerName,
+    AccountBillingCountry AS Country,
+    AccountIndustry AS Industry,
+    OpportunityProbability,
+    COUNT(OpportunityId) AS NumOfOpportunities,
+    COUNTIF(NOT IsOpportunityClosed) AS NumOfOpenOpportunities,
+    COUNTIF(IsOpportunityClosed AND IsOpportunityWon) AS NumOfWonOpportunities,
+    COUNTIF(IsOpportunityClosed AND NOT IsOpportunityWon) AS NumOfLostOpportunities,
+    SUM(TotalSaleAmount) AS TotalOpportunitiesValue,
+    SUM(IF(NOT IsOpportunityClosed, TotalSaleAmount, 0)) AS TotalOpenOpportunitiesValue,
+    SUM(IF(IsOpportunityClosed AND IsOpportunityWon, TotalSaleAmount, 0)) AS TotalWonOpportunitiesValue,
+    SUM(IF(IsOpportunityClosed AND NOT IsOpportunityWon, TotalSaleAmount, 0)) AS TotalLostOpportunitiesValue
+  FROM `{{ project_id_tgt }}.{{ dataset_reporting_tgt_sfdc }}.OpportunityPipeline`
+  GROUP BY
+    AccountName,
+    OpportunityOwnerName,
+    Country,
+    Industry,
+    OpportunityProbability
+);

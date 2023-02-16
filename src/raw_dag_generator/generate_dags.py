@@ -25,8 +25,7 @@ import sys
 import yaml
 from pathlib import Path
 
-from google.cloud.bigquery import Client, SchemaField, Table, TableReference, DatasetReference
-
+from py_libs.bq_helper import table_exists, create_table
 from py_libs.dag_generator import generate_file_from_template
 from py_libs.configs import load_config_file
 
@@ -44,10 +43,6 @@ _SETTINGS_FILE = Path(_THIS_DIR, "../../config/setting.yaml")
 # Directory under which all the generated dag files and related files
 # will be created.
 _GENERATED_DAG_DIR = "generated_dag"
-
-# Directory that contains all the table schema files.
-_SCHEMA_INPUT_DIR = Path(_THIS_DIR, "table_schema")
-_SCHEMA_OUTPUT_DIR = Path(_GENERATED_DAG_DIR, "sfdc_table_schema")
 
 # Directory that has all the dependencies for python dag code
 _DEPENDENCIES_INPUT_DIR = Path(_THIS_DIR, "dependencies")
@@ -88,40 +83,30 @@ def process_table(table_config, raw_dataset, raw_project):
 
     logging.info("      Generated dag python file")
 
-    # Also, copy schema file for this table as well.
-    # TODO: Check csv file format.
-    schema_input_file = Path(_SCHEMA_INPUT_DIR, (base_table + ".csv"))
-    schema_output_file = Path(_SCHEMA_OUTPUT_DIR, (base_table + ".csv"))
-    shutil.copyfile(schema_input_file, schema_output_file)
-    logging.info("      Copied table schema file")
-
-    logging.info("Creating raw table %s.%s.%s", raw_project, raw_dataset,
-                 base_table)
-    with open(
-            schema_input_file,
-            mode="r",
-            encoding="utf-8",
-            newline="",
-    ) as csv_file:
-        schema = []
-        for row in csv.DictReader(csv_file, delimiter=","):
-            schema.append(
-                SchemaField(name=row["TargetField"],
-                            field_type=row["DataType"]))
-        fields = [f.name.lower() for f in schema]
-        if "recordstamp" not in fields:
-            schema.append(
-                SchemaField(name="Recordstamp", field_type="TIMESTAMP"))
-        if "operationalflag" not in fields:
-            schema.append(
-                SchemaField(name="OperationalFlag", field_type="STRING"))
-        client = Client(project=raw_project)
-        table_ref = TableReference(DatasetReference(raw_project, raw_dataset),
-                                   base_table)
-        table = Table(table_ref, schema=schema)
-        client.create_table(table, exists_ok=True)
-    logging.info("Table %s.%s.%s has been created.", raw_project, raw_dataset,
-                 base_table)
+    raw_table = raw_project + "." + raw_dataset + "." + base_table
+    if not table_exists(raw_table):
+        logging.info(
+            "Raw table %s doesn't exists. "
+            "Creating one according to the schema mapping.", raw_table)
+        schema_file = Path(_THIS_DIR,
+                           f"../table_schema/{base_table}.csv").absolute()
+        schema_list = []
+        has_recordstamp = False
+        with open(
+                schema_file,
+                encoding="utf-8",
+                newline="",
+        ) as csv_file:
+            for row in csv.DictReader(csv_file, delimiter=","):
+                source_name = row["SourceField"]
+                target_name = row["TargetField"]
+                if "recordstamp" in [source_name.lower(), target_name.lower()]:
+                    has_recordstamp = True
+                schema_list.append((source_name, row["DataType"]))
+        # If we handle raw tables, we need Recordstamp field.
+        if not has_recordstamp:
+            schema_list.append(("Recordstamp", "TIMESTAMP"))
+        create_table(raw_table, schema_list)
 
 
 def main():
@@ -138,23 +123,25 @@ def main():
 
     raw_project = config_dict.get("projectIdSource")
     raw_dataset = config_dict.get("SFDC").get("datasets").get("raw")
+    location = config_dict.get("location", "US")
 
     logging.info(
         "\n---------------------------------------\n"
         "Using the following parameters from config:\n"
         "  raw_project = %s \n"
         "  raw_dataset = %s \n"
-        "---------------------------------------\n", raw_project, raw_dataset)
+        "  location = %s \n"
+        "---------------------------------------\n", raw_project, raw_dataset,
+        location)
 
     Path(_GENERATED_DAG_DIR).mkdir(exist_ok=True)
-    Path(_SCHEMA_OUTPUT_DIR).mkdir(exist_ok=True)
 
     # Process tables based on configs from settings file
     logging.info("Reading configs...")
 
     if not Path(_SETTINGS_FILE).is_file():
         logging.warning(
-            "️File '%s' does not exist. Skipping Raw DAG generation.",
+            "File '%s' does not exist. Skipping Raw DAG generation.",
             _SETTINGS_FILE)
         sys.exit()
 
@@ -165,8 +152,6 @@ def main():
         logging.warning("File '%s' is empty. Skipping Raw DAG generation.",
                         _SETTINGS_FILE)
         sys.exit()
-
-    # TODO: Check Config File schema.
 
     if not "salesforce_to_raw_tables" in configs:
         logging.warning(

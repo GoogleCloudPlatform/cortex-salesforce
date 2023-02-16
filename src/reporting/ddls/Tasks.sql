@@ -13,7 +13,7 @@
 #-- limitations under the License.
 
 CREATE OR REPLACE VIEW `{{ project_id_tgt }}.{{ dataset_reporting_tgt_sfdc }}.Tasks`
-  OPTIONS(description = 'View for Task Table')
+OPTIONS(description = 'View for Task Table')
 AS (
   SELECT
     Tasks.TaskId,
@@ -27,7 +27,6 @@ AS (
     Tasks.CreatedById,
     Tasks.CreatedDatestamp,
     Tasks.Description,
-    Tasks.IsArchived,
     Tasks.IsClosed,
     Tasks.IsHighPriority,
     Tasks.IsRecurrence,
@@ -53,6 +52,6 @@ AS (
     Tasks.TaskSubtype,
     Tasks.WhatId,
     Tasks.WhoId
-FROM
-  `{{ project_id_src }}.{{ dataset_cdc_processed_sfdc }}.tasks` AS Tasks
+  FROM
+    `{{ project_id_src }}.{{ dataset_cdc_processed_sfdc }}.tasks` AS Tasks
 );
