@@ -18,14 +18,20 @@
 from datetime import timedelta
 import logging
 
-from pendulum import datetime  # Airflow datetime dependency
+try:
+    from pendulum import DateTime as Pendulum
+except ImportError:
+    from pendulum import Pendulum
+from pendulum import UTC
 
 from airflow import DAG
 from airflow.contrib.operators.bigquery_operator import BigQueryOperator
 from airflow.exceptions import AirflowRescheduleException
-from airflow.models.dag import DagRun, State, DagBag
+from airflow.models.dagrun import DagRun
+from airflow.models.dagbag import DagBag
 from airflow.operators.python_operator import PythonOperator
 from airflow.operators.dummy_operator import DummyOperator
+from airflow.utils.state import State
 from airflow.utils.db import provide_session
 from airflow.version import version as AIRFLOW_VERSION
 
@@ -34,7 +40,7 @@ _RAW_AGE_HOURS_MAX = 12
 
 default_args = {
     "depends_on_past": False,
-    "start_date": datetime(int("${year}"), int("${month}"), int("${day}")),
+    "start_date": Pendulum(int("${year}"), int("${month}"), int("${day}")),
     "catchup": False,
     "retries": 1,
     "retry_delay": timedelta(minutes=10),
@@ -44,7 +50,7 @@ default_args = {
 @provide_session
 def check_raw_if_deployed(session=None, **kwargs):
     del kwargs
-    now = datetime.utcnow()
+    now = Pendulum.now(UTC)
     raw_dag_id = "SFDC_EXTRACT_TO_RAW_${base_table}"
 
     active_runs = DagRun.find(dag_id=raw_dag_id, state=State.RUNNING)

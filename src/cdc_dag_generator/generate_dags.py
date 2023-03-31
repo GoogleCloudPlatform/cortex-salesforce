@@ -89,7 +89,7 @@ def process_table(table_setting, raw_project, raw_dataset, cdc_project,
     if "id" not in source_fields_lower:
         # No Id field in Raw. Trying to one via the target name
         # which is supposed to be {api_name}Id
-        id_name = "f{api_name}id".lower()
+        id_name = f"{api_name}id".lower()
         if id_name in target_fields_lower:
             id_index = target_fields_lower.index(id_name)
         else:
