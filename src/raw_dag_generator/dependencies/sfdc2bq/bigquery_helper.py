@@ -271,14 +271,28 @@ class BigQueryHelper:
                 # Query for copying data from the temp table
                 # to the destination table
 
+                logging.info("Starting to find fields to be skipped")
+                # SELECT all fields except IsDeleted, IsArchived and Recordstamp
+                tmp_schema = self.client.get_table(self.temp_table_ref).schema
+                tmp_schema_fields = [f.name.lower() for f in tmp_schema]
+                # Find all fields except IsDeleted, IsArchived and Recordstamp that need to me skipped
+                need_to_be_skipped = [
+                        "isdeleted", "isarchived",
+                        self.timestamp_field_name.lower()
+                    ]
+                
+                fields_to_be_skipped_on_destination_table = [ f.name.lower() for f in destination_schema if f.name.lower() not in tmp_schema_fields ]
+
+                need_to_be_skipped.extend(fields_to_be_skipped_on_destination_table)
+
+                logging.info(f"Those field will be skipped, because they are not in the target table {need_to_be_skipped}")
+                # need_to_be_skipped
+
                 # SELECT all fields except IsDeleted, IsArchived and Recordstamp
                 select_fields = [
                     f.name
                     for f in destination_schema
-                    if f.name.lower() not in [
-                        "isdeleted", "isarchived",
-                        self.timestamp_field_name.lower()
-                    ]
+                    if f.name.lower() not in need_to_be_skipped
                 ]
                 select_fields_str = ",".join(select_fields)
                 # INSERT statement includes Recordstamp as a value.
