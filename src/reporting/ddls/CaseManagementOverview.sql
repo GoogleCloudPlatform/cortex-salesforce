@@ -1,4 +1,4 @@
-#-- Copyright 2022 Google LLC
+#-- Copyright 2023 Google LLC
 #--
 #-- Licensed under the Apache License, Version 2.0 (the "License");
 #-- you may not use this file except in compliance with the License.
@@ -20,55 +20,72 @@
 * notice in upcoming Cortex Data Foundation releases.
 */
 
-CREATE OR REPLACE VIEW `{{ project_id_tgt }}.{{ dataset_reporting_tgt_sfdc }}.CaseManagementOverview`
-  OPTIONS(
-    description = 'Provides information about Case creation and resolution trends'
-  )
-AS (
-  SELECT
-    CaseOrigin,
-    CasePriority,
-    CaseStatus,
-    CaseType,
-    CaseOwnerId,
-    CaseOwnerName,
-    AccountId,
-    AccountName,
-    AccountIndustry,
-    AccountBillingCountry,
-    IF(IsAgentAssigned, CaseOwnerId, NULL) AS CaseOwnerAgentId,
-    COUNT(CaseId) AS NumOfCreatedCases,
-    COUNTIF(IsAgentAssigned) AS NumOfAssignedCases,
-    COUNTIF(NOT IsCaseClosed) AS NumOfOpenCases,
-    COUNTIF(IsCaseClosed) AS NumOfClosedCases,
-    COUNTIF(NOT IsCaseClosed AND CaseStatus = 'Escalated') AS NumOfOpenEscalatedCases,
-    COUNTIF(NOT IsCaseClosed AND CasePriority = 'High') AS NumOfOpenHighPriorityCases,
-    COUNTIF(NOT IsCaseClosed AND CasePriority = 'Medium') AS NumOfOpenMediumPriorityCases,
-    COUNTIF(NOT IsCaseClosed AND CasePriority = 'Low') AS NumOfOpenLowPriorityCases,
-    COUNTIF(NOT IsCaseClosed AND NOT IsAgentAssigned) AS NumOfOpenUnassignedCases,
-    COUNTIF(IsCaseClosed AND CasePriority = 'High') AS NumOfClosedHighPriorityCases,
-    COUNTIF(IsCaseClosed AND CasePriority = 'Medium') AS NumOfClosedMediumPriorityCases,
-    COUNTIF(IsCaseClosed AND CasePriority = 'Low') AS NumOfClosedLowPriorityCases,
-    SUM(IF(
-      NOT IsCaseClosed,
-      DATE_DIFF(DATE(CURRENT_TIMESTAMP()), DATE(CaseCreatedDatestamp), DAY),
-      0)) AS TotalCaseAge,
-    SUM(DATE_DIFF(DATE(CaseClosedDatestamp), DATE(CaseCreatedDatestamp), DAY)) AS TotalCaseResolutionTime,
-    SUM(IF(
+SELECT
+  CaseOrigin,
+  CasePriority,
+  CaseStatus,
+  CaseType,
+  CaseOwnerId,
+  CaseOwnerName,
+  AccountId,
+  AccountName,
+  AccountIndustry,
+  AccountBillingCountry,
+  CaseCreatedDatestamp,
+  CaseClosedDatestamp,
+  --## CORTEX-CUSTOMER Consider adding other dimensions from the CalendarDateDimension table as per your requirement
+  CaseCreatedDate,
+  CaseCreatedMonth,
+  CaseCreatedQuarter,
+  CaseCreatedYear,
+  CaseClosedDate,
+  CaseClosedMonth,
+  CaseClosedQuarter,
+  CaseClosedYear,
+  IF(IsAgentAssigned, CaseOwnerId, NULL) AS CaseOwnerAgentId,
+  COUNT(CaseId) AS NumOfCreatedCases,
+  COUNTIF(IsAgentAssigned) AS NumOfAssignedCases,
+  COUNTIF(NOT IsCaseClosed) AS NumOfOpenCases,
+  COUNTIF(IsCaseClosed) AS NumOfClosedCases,
+  COUNTIF(NOT IsCaseClosed AND CaseStatus = 'Escalated') AS NumOfOpenEscalatedCases,
+  COUNTIF(NOT IsCaseClosed AND CasePriority = 'High') AS NumOfOpenHighPriorityCases,
+  COUNTIF(NOT IsCaseClosed AND CasePriority = 'Medium') AS NumOfOpenMediumPriorityCases,
+  COUNTIF(NOT IsCaseClosed AND CasePriority = 'Low') AS NumOfOpenLowPriorityCases,
+  COUNTIF(NOT IsCaseClosed AND NOT IsAgentAssigned) AS NumOfOpenUnassignedCases,
+  COUNTIF(IsCaseClosed AND CasePriority = 'High') AS NumOfClosedHighPriorityCases,
+  COUNTIF(IsCaseClosed AND CasePriority = 'Medium') AS NumOfClosedMediumPriorityCases,
+  COUNTIF(IsCaseClosed AND CasePriority = 'Low') AS NumOfClosedLowPriorityCases,
+  SUM(
+    IF(
+      NOT IsCaseClosed, DATE_DIFF(DATE(CURRENT_TIMESTAMP()), DATE(CaseCreatedDatestamp), DAY), 0
+    )) AS TotalCaseAge,
+  SUM(DATE_DIFF(DATE(CaseClosedDatestamp), DATE(CaseCreatedDatestamp), DAY)) AS TotalCaseResolutionTime,
+  SUM(
+    IF(
       IsCaseClosed AND CasePriority = 'High',
       DATE_DIFF(DATE(CaseClosedDatestamp), DATE(CaseCreatedDatestamp), DAY),
       0)) AS TotalHighPriorityCaseResolutionTime
-  FROM `{{ project_id_tgt }}.{{ dataset_reporting_tgt_sfdc }}.CaseManagement`
-  GROUP BY
-    CaseOrigin,
-    CasePriority,
-    CaseStatus,
-    CaseType,
-    CaseOwnerId,
-    CaseOwnerName,
-    CaseOwnerAgentId,
-    AccountId,
-    AccountName,
-    AccountIndustry,
-    AccountBillingCountry
-);
+FROM `{{ project_id_tgt }}.{{ sfdc_datasets_reporting }}.CaseManagement`
+GROUP BY
+  CaseOrigin,
+  CasePriority,
+  CaseStatus,
+  CaseType,
+  CaseOwnerId,
+  CaseOwnerName,
+  CaseOwnerAgentId,
+  AccountId,
+  AccountName,
+  AccountIndustry,
+  --## CORTEX-CUSTOMER Consider adding other dimensions from the CalendarDateDimension table as per your requirement
+  CaseCreatedDate,
+  CaseCreatedMonth,
+  CaseCreatedQuarter,
+  CaseCreatedYear,
+  CaseClosedDate,
+  CaseClosedMonth,
+  CaseClosedQuarter,
+  CaseClosedYear,
+  AccountBillingCountry,
+  CaseCreatedDatestamp,
+  CaseClosedDatestamp

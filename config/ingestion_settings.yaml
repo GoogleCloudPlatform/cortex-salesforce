@@ -8,6 +8,15 @@ salesforce_to_raw_tables:
   - base_table: contacts
     load_frequency: "@daily"
     api_name: Contact
+## CORTEX-CUSTOMER Please remove entries for currency_types and dated_conversion_rates objects below if
+## Advanced Currency Management is not enabled within your source Salesforce system.
+## See https://help.salesforce.com/s/articleView?id=sf.administration_about_advanced_currency_management.htm
+  - base_table: currency_types
+    load_frequency: "@daily"
+    api_name: CurrencyType
+  - base_table: dated_conversion_rates
+    load_frequency: "@daily"
+    api_name: DatedConversionRate
   - base_table: events
     load_frequency: "@daily"
     api_name: Event
@@ -38,6 +47,17 @@ raw_to_cdc_tables:
   - base_table: contacts
     raw_table: contacts
     api_name: Contact
+    load_frequency: "@daily"
+## CORTEX-CUSTOMER Please remove entries for currency_types and dated_conversion_rates objects below if
+## Advanced Currency Management is not enabled within your source Salesforce system.
+## See https://help.salesforce.com/s/articleView?id=sf.administration_about_advanced_currency_management.htm
+  - base_table: currency_types
+    raw_table: currency_types
+    api_name: CurrencyType
+    load_frequency: "@daily"
+  - base_table: dated_conversion_rates
+    raw_table: dated_conversion_rates
+    api_name: DatedConversionRate
     load_frequency: "@daily"
   - base_table: events
     raw_table: events

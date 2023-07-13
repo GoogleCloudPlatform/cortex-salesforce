@@ -14,16 +14,15 @@
 
 
 SELECT
-  RecordTypes.RecordTypeId,
-  RecordTypes.Name AS RecordTypeName,
-  RecordTypes.DeveloperName,
-  RecordTypes.NamespacePrefix,
-  RecordTypes.Description,
-  RecordTypes.BusinessProcessId,
-  RecordTypes.SobjectType,
-  RecordTypes.IsActive,
-  RecordTypes.CreatedById,
-  RecordTypes.CreatedDatestamp,
-  RecordTypes.LastModifiedById,
-  RecordTypes.LastModifiedDatestamp
-FROM `{{ project_id_src }}.{{ sfdc_datasets_cdc }}.record_types` AS RecordTypes
+  DatedConversionRate.DatedConversionRateId,
+  DatedConversionRate.IsoCode,
+  DatedConversionRate.StartDate,
+  DatedConversionRate.NextStartDate,
+  DatedConversionRate.ConversionRate,
+  DatedConversionRate.CreatedDatestamp,
+  DatedConversionRate.CreatedById,
+  DatedConversionRate.LastModifiedDatestamp,
+  DatedConversionRate.LastModifiedById,
+  DATE_SUB(DatedConversionRate.NextStartDate, INTERVAL 1 DAY) AS EndDate
+FROM
+  `{{ project_id_src }}.{{ sfdc_datasets_cdc }}.dated_conversion_rates` AS DatedConversionRate

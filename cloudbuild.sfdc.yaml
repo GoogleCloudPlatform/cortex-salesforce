@@ -15,75 +15,143 @@
 # This build file generates all the necessary objects (DAG files, Bigquery
 # tables and views etc) for a Cortex deployment for a Salesforce system.
 
-# Input parameters:
-#   _GCS_LOGS_BUCKET : An existing GCS bucket where build logs will be written.
-#   _TGT_BUCKET : An existing GCS bucket where generated files related to
-#                 Airflow DAGs(DAG py file, dependencies, DAG sql file etc)
-#                 will be copied over to.
-#   _DEPLOY_CDC : Whether to deploy CDC DAGs, true or false.
-
 steps:
+  # init_deployment_config.py leaves the validated config.json file in workspace/config so it's available for other build steps
+  - name: gcr.io/kittycorn-public/deploy-kittycorn:v2.0
+    entrypoint: "bash"
+    id: 'init_deploy_config'
+    args:
+      - "-c"
+      - |-
+        set -e
+        echo "Initial configuration ${_CONFIG_FILE}:"
+        cat ${_CONFIG_FILE}
+
+        python3 src/common/init_deployment_config.py \
+            --config-file "${_CONFIG_FILE}" \
+            --sub-validator "src"
+
+        echo "Processed configuration:"
+        cat ${_CONFIG_FILE}
+        echo -e "\n--------------------------------"
+
   - name: 'gcr.io/kittycorn-public/deploy-kittycorn:v2.0'
     entrypoint: /bin/bash
     args:
-    - -c
-    - |
-      set -e
-      export PYTHONPATH=$$PYTHONPATH:./src
-      export create_mapping_views=$(cat 'config/sfdc_config.json' | python -c "import json,sys; print(str(json.load(sys.stdin)['SFDC']['createMappingViews']).lower())" 2>/dev/null || echo true)
-      if [[ "$_DEPLOY_CDC" == "true" ]]
-      then
-        # RAW DAG generation
-        echo "Generating Raw DAGs and SQL files."
-        python src/raw_dag_generator/generate_dags.py
-        echo "✅ Generated Raw DAGs and SQL files."
-        # If create_mapping_views is true, we won't create CDC DAGs.
-        if [[ "${create_mapping_views}" != "true" ]]
-        then
-          # CDC DAG generation
-          echo "Generating CDC DAGs and SQL files."
-          python src/cdc_dag_generator/generate_dags.py
-          echo "✅ Generated CDC DAGs and SQL files."
-        fi
-        # Copy generated DAG sql files to Target GCS bucket
-        generated_files=$(shopt -s nullglob dotglob; echo generated_sql/*.sql)
-        if (( ${#generated_files} ))
-        then
-          echo "Copying SQL files to gs://${_TGT_BUCKET}/data/bq_data_replication."
-          gsutil -m cp -r 'generated_sql/*.sql' gs://${_TGT_BUCKET}/data/bq_data_replication
-          echo "✅ SQL files have been copied."
-        else
-          echo "🔪🔪🔪No SQL files found under generated_sql folder or the folder does not exist. Skipping copy.🔪🔪🔪"
-        fi
-        # Copy generated DAG python and related files to Target GCS bucket
-        generated_files=$(shopt -s nullglob dotglob; echo ./generated_dag/*)
-        if (( ${#generated_files} ))
-        then
-          echo "Copying DAG files to gs://${_TGT_BUCKET}/dags."
-          gsutil -m cp -r './generated_dag/*' gs://'${_TGT_BUCKET}'/dags
-          echo "✅ DAG files have been copied."
-        else
-          echo "🔪🔪🔪No Python files found under generated_dag folder or the folder does not exist. Skipping copy.🔪🔪🔪"
-        fi
-      fi
-      # If create_mapping_views is true, we create CDC views.
-      if [[ "${create_mapping_views}" == "true" ]]
-      then
-        # CDC view generation
-        echo "Generating CDC views."
-        python src/cdc_dag_generator/generate_views.py
-        echo "✅ CDC views have been generated."
-      fi
+      - "-c"
+      - |-
+        set -e
 
-  # Generate SFDC Reporting bigquery views and fucntions.
-  - name: "gcr.io/kittycorn-public/deploy-kittycorn:v2.0"
-    entrypoint: /bin/bash
+        export PYTHONPATH=$$PYTHONPATH:./src
+
+        _DEPLOY_CDC_=$(jq -r ."SFDC.deployCDC" "${_CONFIG_FILE}")
+        create_mapping_views=$(jq -r ."SFDC.createMappingViews" "${_CONFIG_FILE}")
+        create_placeholder_tables=$(jq -r ."SFDC.createPlaceholders" "${_CONFIG_FILE}")
+
+        if [[ "$${create_mapping_views}" == "" ]]
+        then
+          create_mapping_views="true"
+        fi
+
+        if [[ "$${create_placeholder_tables}" == "" ]]
+        then
+          create_placeholder_tables="true"
+        fi
+
+        if [[ "${_TGT_BUCKET}" != "" ]]
+        then
+          _TGT_BUCKET_="${_TGT_BUCKET}"
+        else
+          _TGT_BUCKET_=$(jq -r ."targetBucket" "${_CONFIG_FILE}")
+        fi
+
+        if [[ "$${_DEPLOY_CDC_}" == "true" ]]
+        then
+          # RAW DAG generation
+          echo "Generating Raw DAGs and SQL files."
+          python src/raw_dag_generator/generate_dags.py
+          echo "✅ Generated Raw DAGs and SQL files."
+          # If create_mapping_views is true, we create CDC views. Otherwise, we create CDC DAGs.
+          if [[ "$${create_mapping_views}" == "true" ]]
+          then
+            # CDC view generation
+            echo "Generating CDC views."
+            python src/cdc_dag_generator/generate_views.py
+            echo "✅ CDC views have been generated."
+          else
+            # CDC DAG generation
+            echo "Generating CDC DAGs and SQL files."
+            python src/cdc_dag_generator/generate_dags.py
+            echo "✅ Generated CDC DAGs and SQL files."
+          fi
+        else
+          echo "==== Skipping RAW and CDC DAG generation for Salesforce ===="
+        fi
+        if [[ "$${_DEPLOY_CDC_}" == "true" ]]
+        then
+          # Copy generated SFDC DAG sql files to Target GCS bucket
+          if [[ $(find generated_sql -type f 2> /dev/null | wc -l) -gt 0 ]]
+          then
+            echo "Copying SFDC SQL files to gs://$${_TGT_BUCKET_}/dags/sfdc."
+            gsutil -m cp -r './generated_sql/*' gs://$${_TGT_BUCKET_}/dags/
+            echo "✅ SFDC SQL files have been copied."
+          else
+            echo "🔪No SQL files found under generated_sql/sfdc directory or the directory does not exist. Skipping copy.🔪"
+          fi
+          # Copy generated SFDC DAG python and related files to Target GCS bucket
+          if [[ $(find generated_dag -type f 2> /dev/null | wc -l) -gt 0 ]]
+          then
+            echo "Copying SFDC DAG files to gs://$${_TGT_BUCKET_}/dags/sfdc."
+            gsutil -m cp -r './generated_dag/*' gs://$${_TGT_BUCKET_}/dags/
+            echo "✅ SFDC DAG files have been copied."
+          else
+            echo "🔪No Python files found under generated_dag/sfdc directory or the directory does not exist. Skipping copy.🔪"
+          fi
+          if {{ "$${_DEPLOY_CDC_}" == "true" && "$${create_placeholder_tables}" == "true" }}
+          then
+            echo "Creating placeholder CDC tables / views in case they do not exist."
+            set -e
+            export PYTHONPATH=$$PYTHONPATH:./src
+            src/common/materializer/deploy.sh \
+                --gcs_logs_bucket "${_GCS_BUCKET}" \
+                --gcs_tgt_bucket "$${_TGT_BUCKET_}" \
+                --module_name "SFDC" \
+                --target_type "CDC" \
+                --config_file "${_CONFIG_FILE}" \
+                --materializer_settings_file config/cdc_placeholder_settings.yaml
+            echo "✅ Placeholder CDC tables / views have been created."
+          else
+            echo "🔪🔪🔪Deploy CDC flag is false, or CreatePlaceholders flag is false. Skipping placeholder table / view generation.🔪🔪🔪"
+          fi
+        fi
+
+  # Generate SFDC Reporting bigquery views / tables via Materializer.
+  - name: gcr.io/kittycorn-public/deploy-kittycorn:v2.0
+    id: 'reporting'
+    entrypoint: "bash"
     args:
-    - -c
-    - |
-      src/reporting/deploy.sh "${_GCS_LOGS_BUCKET}"
+      - "-c"
+      - |-
+        if [[ "${_TGT_BUCKET}" != "" ]]
+        then
+          _TGT_BUCKET_="${_TGT_BUCKET}"
+        else
+          _TGT_BUCKET_=$(jq -r ."targetBucket" "${_CONFIG_FILE}")
+        fi
 
-logsBucket: "gs://$_GCS_LOGS_BUCKET"
+        set -e
+        export PYTHONPATH=$$PYTHONPATH:./src
+        src/common/materializer/deploy.sh \
+            --gcs_logs_bucket "${_GCS_BUCKET}" \
+            --gcs_tgt_bucket "$${_TGT_BUCKET_}" \
+            --module_name "SFDC" \
+            --target_type "Reporting" \
+            --config_file "${_CONFIG_FILE}" \
+            --materializer_settings_file config/reporting_settings.yaml
+
+logsBucket: "gs://$_GCS_BUCKET"
 timeout: 10200s
+substitutions:
+  _CONFIG_FILE: "config/sfdc_config.json"
 options:
   substitution_option: "ALLOW_LOOSE"

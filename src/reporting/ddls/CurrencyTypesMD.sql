@@ -12,18 +12,16 @@
 #-- See the License for the specific language governing permissions and
 #-- limitations under the License.
 
-
 SELECT
-  RecordTypes.RecordTypeId,
-  RecordTypes.Name AS RecordTypeName,
-  RecordTypes.DeveloperName,
-  RecordTypes.NamespacePrefix,
-  RecordTypes.Description,
-  RecordTypes.BusinessProcessId,
-  RecordTypes.SobjectType,
-  RecordTypes.IsActive,
-  RecordTypes.CreatedById,
-  RecordTypes.CreatedDatestamp,
-  RecordTypes.LastModifiedById,
-  RecordTypes.LastModifiedDatestamp
-FROM `{{ project_id_src }}.{{ sfdc_datasets_cdc }}.record_types` AS RecordTypes
+  CurrencyType.CurrencyTypeId,
+  CurrencyType.IsoCode,
+  CurrencyType.ConversionRate,
+  CurrencyType.DecimalPlaces,
+  CurrencyType.IsActive,
+  CurrencyType.IsCorporate,
+  CurrencyType.CreatedDatestamp,
+  CurrencyType.CreatedById,
+  CurrencyType.LastModifiedDatestamp,
+  CurrencyType.LastModifiedById
+FROM
+  `{{ project_id_src }}.{{ sfdc_datasets_cdc }}.currency_types` AS CurrencyType

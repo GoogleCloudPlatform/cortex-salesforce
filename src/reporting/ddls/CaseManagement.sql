@@ -1,4 +1,4 @@
-#-- Copyright 2022 Google LLC
+#-- Copyright 2023 Google LLC
 #--
 #-- Licensed under the Apache License, Version 2.0 (the "License");
 #-- you may not use this file except in compliance with the License.
@@ -12,9 +12,6 @@
 #-- See the License for the specific language governing permissions and
 #-- limitations under the License.
 
-CREATE OR REPLACE VIEW `{{ project_id_tgt }}.{{ dataset_reporting_tgt_sfdc }}.CaseManagement`
-  OPTIONS(description = 'Provides information about Case creation and resolution trends')
-AS (
   SELECT
     Cases.CaseId AS CaseId,
     Cases.Origin AS CaseOrigin,
@@ -38,20 +35,30 @@ AS (
     AccountsMD.ShippingCountry AS AccountShippingCountry,
     AccountsMD.CreatedDatestamp AS AccountCreatedDatestamp,
     CaseOwner.Name AS CaseOwnerName,
-    -- Agents who have been assigned to Cases
-    (Cases.OwnerId NOT LIKE '00G%') AS IsAgentAssigned
+    --## Agents who have been assigned to Cases
+    (Cases.OwnerId NOT LIKE '00G%') AS IsAgentAssigned,
+    --## CORTEX-CUSTOMER Consider adding other dimensions from the CalendarDateDimension table as per your requirement
+    Cases.CaseCreatedDate AS CaseCreatedDate,
+    Cases.CaseCreatedWeek AS CaseCreatedWeek,
+    Cases.CaseCreatedMonth AS CaseCreatedMonth,
+    Cases.CaseCreatedQuarter AS CaseCreatedQuarter,
+    Cases.CaseCreatedYear AS CaseCreatedYear,
+    Cases.CaseClosedDate AS CaseClosedDate,
+    Cases.CaseClosedWeek AS CaseClosedWeek,
+    Cases.CaseClosedMonth AS CaseClosedMonth,
+    Cases.CaseClosedQuarter AS CaseClosedQuarter,
+    Cases.CaseClosedYear AS CaseClosedYear
   FROM
-    `{{ project_id_tgt }}.{{ dataset_reporting_tgt_sfdc }}.Cases` AS Cases
+    `{{ project_id_tgt }}.{{ sfdc_datasets_reporting }}.Cases` AS Cases
   LEFT JOIN
-    `{{ project_id_tgt }}.{{ dataset_reporting_tgt_sfdc }}.AccountsMD` AS AccountsMD
+    `{{ project_id_tgt }}.{{ sfdc_datasets_reporting }}.AccountsMD` AS AccountsMD
     ON
       Cases.AccountId = AccountsMD.AccountId
   LEFT JOIN
-    `{{ project_id_tgt }}.{{ dataset_reporting_tgt_sfdc }}.UsersMD` AS CaseOwner
+    `{{ project_id_tgt }}.{{ sfdc_datasets_reporting }}.UsersMD` AS CaseOwner
     ON
       Cases.OwnerId = CaseOwner.UserId
   LEFT JOIN
-    `{{ project_id_tgt }}.{{ dataset_reporting_tgt_sfdc }}.UsersMD` AS AccountOwner
+    `{{ project_id_tgt }}.{{ sfdc_datasets_reporting }}.UsersMD` AS AccountOwner
     ON
       AccountsMD.OwnerId = AccountOwner.UserId
-);

@@ -1,4 +1,4 @@
-#-- Copyright 2022 Google LLC
+#-- Copyright 2023 Google LLC
 #--
 #-- Licensed under the Apache License, Version 2.0 (the "License");
 #-- you may not use this file except in compliance with the License.
@@ -20,30 +20,46 @@
 * notice in upcoming Cortex Data Foundation releases.
 */
 
-CREATE OR REPLACE VIEW `{{ project_id_tgt }}.{{ dataset_reporting_tgt_sfdc }}.LeadsCaptureConversionsOverview`
-  OPTIONS(
-    description = 'Provides information about Leads creation and conversion trends'
-  )
-AS (
-  SELECT
-    LeadCountry,
-    LeadIndustry,
-    LeadOwnerName,
-    LeadSource,
-    LeadStatus,
-    LeadCreatedDatestamp,
-    COUNT(LeadId) AS NumOfLeads,
-    COUNT(DISTINCT(IF(IsLeadConverted IS TRUE, LeadId, NULL))) AS NumOfConvertedLeads,
-    SUM(
-      DATETIME_DIFF(DATETIME(LeadFirstResponeDatestamp), DATETIME(LeadCreatedDatestamp), HOUR)
-    ) AS TotalLeadResponseTimeHours
-  FROM
-    `{{ project_id_tgt }}.{{ dataset_reporting_tgt_sfdc }}.LeadsCaptureConversions`
-  GROUP BY
-    LeadCountry,
-    LeadIndustry,
-    LeadOwnerName,
-    LeadSource,
-    LeadStatus,
-    LeadCreatedDatestamp
-);
+
+SELECT
+  LeadCountry,
+  LeadIndustry,
+  LeadOwnerName,
+  LeadSource,
+  LeadStatus,
+  LeadCreatedDatestamp,
+  TotalSaleAmountInTargetCurrency,
+  TargetCurrency,
+  SourceCurrency,
+  CurrencyExchangeRate,
+  CurrencyConversionDate,
+  --## CORTEX-CUSTOMER Consider adding other dimensions from the CalendarDateDimension table as per your requirement
+  LeadCreatedDate,
+  LeadCreatedWeek,
+  LeadCreatedMonth,
+  LeadCreatedQuarter,
+  LeadCreatedYear,
+  COUNT(LeadId) AS NumOfLeads,
+  COUNT(DISTINCT(IF(IsLeadConverted IS TRUE, LeadId, NULL))) AS NumOfConvertedLeads,
+  SUM(DATETIME_DIFF(LeadFirstResponeDatestamp, LeadCreatedDatestamp, HOUR)) AS TotalLeadResponseTimeHours,
+  COUNTIF(LeadFirstResponeDatestamp IS NOT NULL) AS NumOfLeadsWithResponse
+FROM
+  `{{ project_id_tgt }}.{{ sfdc_datasets_reporting }}.LeadsCaptureConversions`
+GROUP BY
+  LeadCountry,
+  LeadIndustry,
+  LeadOwnerName,
+  LeadSource,
+  LeadStatus,
+  --## CORTEX-CUSTOMER Consider adding other dimensions from the CalendarDateDimension table as per your requirement
+  LeadCreatedDate,
+  LeadCreatedWeek,
+  LeadCreatedMonth,
+  LeadCreatedQuarter,
+  LeadCreatedYear,
+  LeadCreatedDatestamp,
+  TotalSaleAmountInTargetCurrency,
+  TargetCurrency,
+  SourceCurrency,
+  CurrencyExchangeRate,
+  CurrencyConversionDate

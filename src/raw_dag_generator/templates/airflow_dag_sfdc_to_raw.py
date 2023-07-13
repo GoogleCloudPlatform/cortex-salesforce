@@ -26,12 +26,14 @@ from airflow.operators.dummy_operator import DummyOperator
 # Use dynamic import to account for Airflow directory structure limitations.
 _THIS_DIR = os.path.dirname(os.path.realpath(__file__))
 _DEPENDENCIES_LIB_PATH = (
-    os.path.join(_THIS_DIR, "sfdc_dag_dependencies.airflow_sfdc2bq")
+    os.path.join(_THIS_DIR, "dag_dependencies.airflow_sfdc2bq")
     .replace("/home/airflow/gcs/dags/", "")
     .replace("/", ".")
 )
 
 sfdc_to_bigquery_module = importlib.import_module(_DEPENDENCIES_LIB_PATH)
+
+_IDENTIFIER = "SFDC_${project_id}_${raw_dataset}_extract_to_raw_${base_table}"
 
 default_args = {
    "depends_on_past": False,
@@ -42,18 +44,19 @@ default_args = {
 }
 
 with DAG(
-        dag_id="SFDC_EXTRACT_TO_RAW_${base_table}",
+        dag_id=_IDENTIFIER,
         description=(
             "Data extraction from Salesforce system to BQ RAW dataset "
             "for '${base_table}' object"),
         default_args=default_args,
         schedule_interval="${load_frequency}",
+        tags=["sfdc", "raw"],
         catchup = False,
         max_active_runs=1
 ) as dag:
     start_task = DummyOperator(task_id="start")
     extract_data = PythonOperator(
-        task_id="sfdc_to_raw_${base_table}",
+        task_id=_IDENTIFIER,
         python_callable=sfdc_to_bigquery_module
                             .extract_data_from_sfdc,
         op_args = [

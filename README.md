@@ -9,7 +9,7 @@ The current repository contains the analytical views and models for SalesForce.c
 
 Please see detailed deployment instructions and FAQs in the core [Google Cloud Cortex Data Foundation](https://github.com/GoogleCloudPlatform/cortex-data-foundation) repository.
 
-This repository can be deployedon its own, separate from the Data Foundation. See the details about required configuration and prerequisites in the instructions applicable to Salesforce.
+This repository can be deployed on its own, separate from the Data Foundation. See the details about required configuration and prerequisites in the instructions applicable to Salesforce.
 
 # Support
 

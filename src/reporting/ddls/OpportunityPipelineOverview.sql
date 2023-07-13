@@ -1,4 +1,4 @@
-#-- Copyright 2022 Google LLC
+#-- Copyright 2023 Google LLC
 #--
 #-- Licensed under the Apache License, Version 2.0 (the "License");
 #-- you may not use this file except in compliance with the License.
@@ -20,30 +20,60 @@
 * notice in upcoming Cortex Data Foundation releases.
 */
 
-CREATE OR REPLACE VIEW `{{ project_id_tgt }}.{{ dataset_reporting_tgt_sfdc }}.OpportunityPipelineOverview`
-  OPTIONS(
-    description = 'Provides information about Opportunity trends and pipeline to do the forcasting'
-  )
-AS (
-  SELECT
-    AccountName,
-    OpportunityOwnerName,
-    AccountBillingCountry AS Country,
-    AccountIndustry AS Industry,
-    OpportunityProbability,
-    COUNT(OpportunityId) AS NumOfOpportunities,
-    COUNTIF(NOT IsOpportunityClosed) AS NumOfOpenOpportunities,
-    COUNTIF(IsOpportunityClosed AND IsOpportunityWon) AS NumOfWonOpportunities,
-    COUNTIF(IsOpportunityClosed AND NOT IsOpportunityWon) AS NumOfLostOpportunities,
-    SUM(TotalSaleAmount) AS TotalOpportunitiesValue,
-    SUM(IF(NOT IsOpportunityClosed, TotalSaleAmount, 0)) AS TotalOpenOpportunitiesValue,
-    SUM(IF(IsOpportunityClosed AND IsOpportunityWon, TotalSaleAmount, 0)) AS TotalWonOpportunitiesValue,
-    SUM(IF(IsOpportunityClosed AND NOT IsOpportunityWon, TotalSaleAmount, 0)) AS TotalLostOpportunitiesValue
-  FROM `{{ project_id_tgt }}.{{ dataset_reporting_tgt_sfdc }}.OpportunityPipeline`
-  GROUP BY
-    AccountName,
-    OpportunityOwnerName,
-    Country,
-    Industry,
-    OpportunityProbability
-);
+SELECT
+  AccountName,
+  OpportunityOwnerName,
+  AccountBillingCountry AS Country,
+  AccountIndustry AS Industry,
+  OpportunityProbability,
+  OpportunityCloseDate,
+  OpportunityCreatedDatestamp,
+  TotalSaleAmountInTargetCurrency,
+  TargetCurrency,
+  SourceCurrency,
+  CurrencyExchangeRate,
+  CurrencyConversionDate,
+  --## CORTEX-CUSTOMER Consider adding other dimensions from the CalendarDateDimension table as per your requirement
+  OpportunityCreatedDate,
+  OpportunityCreatedWeek,
+  OpportunityCreatedMonth,
+  OpportunityCreatedQuarter,
+  OpportunityCreatedYear,
+  OpportunityClosedDate,
+  OpportunityClosedWeek,
+  OpportunityClosedMonth,
+  OpportunityClosedQuarter,
+  OpportunityClosedYear,
+  COUNT(OpportunityId) AS NumOfOpportunities,
+  COUNTIF(NOT IsOpportunityClosed) AS NumOfOpenOpportunities,
+  COUNTIF(IsOpportunityClosed AND IsOpportunityWon) AS NumOfWonOpportunities,
+  COUNTIF(IsOpportunityClosed AND NOT IsOpportunityWon) AS NumOfLostOpportunities,
+  SUM(TotalSaleAmountInTargetCurrency) AS TotalOpportunitiesValue,
+  SUM(IF(NOT IsOpportunityClosed, TotalSaleAmountInTargetCurrency, 0)) AS TotalOpenOpportunitiesValue,
+  SUM(IF(IsOpportunityClosed AND IsOpportunityWon, TotalSaleAmountInTargetCurrency, 0)) AS TotalWonOpportunitiesValue,
+  SUM(IF(IsOpportunityClosed AND NOT IsOpportunityWon, TotalSaleAmountInTargetCurrency, 0)) AS TotalLostOpportunitiesValue
+FROM `{{ project_id_tgt }}.{{ sfdc_datasets_reporting }}.OpportunityPipeline`
+GROUP BY
+  AccountName,
+  OpportunityOwnerName,
+  Country,
+  Industry,
+  OpportunityCloseDate,
+  OpportunityCreatedDatestamp,
+  TotalSaleAmountInTargetCurrency,
+  TargetCurrency,
+  SourceCurrency,
+  CurrencyExchangeRate,
+  CurrencyConversionDate,
+  --## CORTEX-CUSTOMER Consider adding other dimensions from the CalendarDateDimension table as per your requirement
+  OpportunityCreatedDate,
+  OpportunityCreatedWeek,
+  OpportunityCreatedMonth,
+  OpportunityCreatedQuarter,
+  OpportunityCreatedYear,
+  OpportunityClosedDate,
+  OpportunityClosedWeek,
+  OpportunityClosedMonth,
+  OpportunityClosedQuarter,
+  OpportunityClosedYear,
+  OpportunityProbability

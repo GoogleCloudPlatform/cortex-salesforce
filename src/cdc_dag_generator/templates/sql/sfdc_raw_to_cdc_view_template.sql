@@ -14,6 +14,8 @@
 
 CREATE OR REPLACE VIEW `${target_view}` AS
 (
-  SELECT ${field_assignments}
-  FROM `${source_table}`
+  SELECT
+    ${field_assignments}
+  FROM
+    `${source_table}`
 )

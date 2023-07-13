@@ -18,29 +18,54 @@
 -- we account for transactions that were in-flight
 -- during the prior replication
 DECLARE max_rs TIMESTAMP;
-SET max_rs = TIMESTAMP_SUB((SELECT COALESCE(MAX(${target_systemmodstamp}),
-  TIMESTAMP('1980-01-01 00:00:00+00')) FROM `${target_table}`), INTERVAL 10 MINUTE);
+
+SET max_rs = TIMESTAMP_SUB((
+    SELECT
+      COALESCE(MAX(${target_systemmodstamp}),
+      TIMESTAMP('1980-01-01 00:00:00+00'))
+    FROM
+      `${target_table}`
+  ),
+  INTERVAL 10 MINUTE
+);
 
 BEGIN TRANSACTION;
 
 --- Delete rows that are not present in raw. This will get rid of deleted and archived records.
 DELETE FROM `${target_table}`
-WHERE `${target_id}` NOT IN
-  (SELECT `${source_id}` AS `${target_id}` FROM `${source_table}`);
+WHERE
+  `${target_id}` NOT IN (
+    SELECT
+      `${source_id}` AS `${target_id}`
+    FROM
+      `${source_table}`
+  );
 
 -- Delete rows that are updated in the source.
 -- (Use '>=' to account for _possible_ inconsistency
 -- due to SFDC SystemModstamp resolution)
 DELETE FROM `${target_table}`
-WHERE `${target_id}` IN
-  (SELECT `${source_id}` AS `${target_id}` FROM `${source_table}` WHERE `${source_systemmodstamp}` >= max_rs);
+WHERE
+  `${target_id}` IN (
+    SELECT
+      `${source_id}` AS `${target_id}`
+    FROM
+      `${source_table}`
+    WHERE
+      `${source_systemmodstamp}` >= max_rs
+  );
 
 -- Insert new and updated rows.
 -- (Use '>=' to account for _possible_ inconsistency
 -- due to SFDC SystemModstamp resolution)
-INSERT INTO `${target_table}` (${target_fields})
-  SELECT ${field_assignments}
-  FROM `${source_table}` AS SRC
-  WHERE SRC.${source_systemmodstamp} >= max_rs;
+INSERT INTO `${target_table}` (
+  ${target_fields}
+)
+SELECT
+  ${field_assignments}
+FROM
+  `${source_table}` AS SRC
+WHERE
+  SRC.${source_systemmodstamp} >= max_rs;
 
 COMMIT TRANSACTION;

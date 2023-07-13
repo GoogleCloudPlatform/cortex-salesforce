@@ -25,9 +25,11 @@ import sys
 import yaml
 from pathlib import Path
 
-from py_libs.bq_helper import table_exists, create_table
-from py_libs.dag_generator import generate_file_from_template
-from py_libs.configs import load_config_file
+from google.cloud import bigquery
+
+from common.py_libs.bq_helper import table_exists, create_table
+from common.py_libs.dag_generator import generate_file_from_template
+from common.py_libs.configs import load_config_file
 
 # NOTE: All paths here are relative to the root directory, unless specified
 # otherwise.
@@ -38,21 +40,21 @@ _THIS_DIR = Path(__file__).resolve().parent
 _CONFIG_FILE = Path(_THIS_DIR, "../../config/sfdc_config.json")
 
 # Settings file containing tables to be copied from SFDC.
-_SETTINGS_FILE = Path(_THIS_DIR, "../../config/setting.yaml")
+_SETTINGS_FILE = Path(_THIS_DIR, "../../config/ingestion_settings.yaml")
 
 # Directory under which all the generated dag files and related files
 # will be created.
-_GENERATED_DAG_DIR = "generated_dag"
+_GENERATED_DAG_DIR = "generated_dag/sfdc/raw"
 
 # Directory that has all the dependencies for python dag code
 _DEPENDENCIES_INPUT_DIR = Path(_THIS_DIR, "dependencies")
-_DEPENDENCIES_OUTPUT_DIR = Path(_GENERATED_DAG_DIR, "sfdc_dag_dependencies")
+_DEPENDENCIES_OUTPUT_DIR = Path(_GENERATED_DAG_DIR, "dag_dependencies")
 
 # Template files
 _TEMPLATE_DIR = Path(_THIS_DIR, "templates")
 
 
-def process_table(table_config, raw_dataset, raw_project):
+def process_table(bq_client, table_config, raw_dataset, raw_project):
 
     api_name = table_config["api_name"]
     base_table = table_config["base_table"].lower()
@@ -63,7 +65,8 @@ def process_table(table_config, raw_dataset, raw_project):
 
     output_dag_py_file = Path(
         _GENERATED_DAG_DIR,
-        ("sfdc_extract_to_raw_" + base_table.replace(".", "_") + ".py"))
+        (raw_project + "_" + raw_dataset + "_sfdc_extract_to_raw_"
+         + base_table.replace(".", "_") + ".py"))
 
     today = datetime.datetime.now()
     load_frequency = table_config["load_frequency"]
@@ -84,7 +87,7 @@ def process_table(table_config, raw_dataset, raw_project):
     logging.info("      Generated dag python file")
 
     raw_table = raw_project + "." + raw_dataset + "." + base_table
-    if not table_exists(raw_table):
+    if not table_exists(bq_client, raw_table):
         logging.info(
             "Raw table %s doesn't exists. "
             "Creating one according to the schema mapping.", raw_table)
@@ -106,7 +109,7 @@ def process_table(table_config, raw_dataset, raw_project):
         # If we handle raw tables, we need Recordstamp field.
         if not has_recordstamp:
             schema_list.append(("Recordstamp", "TIMESTAMP"))
-        create_table(raw_table, schema_list)
+        create_table(bq_client, raw_table, schema_list)
 
 
 def main():
@@ -134,7 +137,8 @@ def main():
         "---------------------------------------\n", raw_project, raw_dataset,
         location)
 
-    Path(_GENERATED_DAG_DIR).mkdir(exist_ok=True)
+    Path(_GENERATED_DAG_DIR).mkdir(exist_ok=True, parents=True)
+    Path(_DEPENDENCIES_OUTPUT_DIR).mkdir(exist_ok=True, parents=True)
 
     # Process tables based on configs from settings file
     logging.info("Reading configs...")
@@ -161,9 +165,11 @@ def main():
 
     logging.info("Processing tables...")
 
+    bq_client = bigquery.Client()
+
     table_configs = configs["salesforce_to_raw_tables"]
     for table_config in table_configs:
-        process_table(table_config, raw_dataset, raw_project)
+        process_table(bq_client, table_config, raw_dataset, raw_project)
 
     # Copy Dependencies for the DAG Python files too
     logging.info("Copying dependencies...")

@@ -25,10 +25,12 @@ import yaml
 from pathlib import Path
 import typing
 
-from py_libs.bq_helper import execute_sql_file
-from py_libs.cdc import create_cdc_table
-from py_libs.configs import load_config_file
-from py_libs.dag_generator import generate_file_from_template
+from google.cloud import bigquery
+
+from common.py_libs.bq_helper import execute_sql_file
+from common.py_libs.cdc import create_cdc_table
+from common.py_libs.configs import load_config_file
+from common.py_libs.dag_generator import generate_file_from_template
 
 # NOTE: All paths here are relative to the root directory, unless specified
 # otherwise.
@@ -39,16 +41,16 @@ _THIS_DIR = Path(__file__).resolve().parent
 _CONFIG_FILE = Path(_THIS_DIR, "../../config/sfdc_config.json")
 
 # Settings file containing tables to be copied from SFDC.
-_SETTINGS_FILE = Path(_THIS_DIR, "../../config/setting.yaml")
+_SETTINGS_FILE = Path(_THIS_DIR, "../../config/ingestion_settings.yaml")
 
-_GENERATED_FILE_PREFIX = "sfdc_raw_to_cdc_"
+_TEMPLATE_FILE_PREFIX = "sfdc_raw_to_cdc_"
 _TEMPLATE_SQL_NAME = "template"
 
 # Directory under which all the generated dag files and related files
 # will be created.
-_GENERATED_DAG_DIR = "generated_dag"
+_GENERATED_DAG_DIR = "generated_dag/sfdc/cdc"
 # Directory under which all the generated sql files will be created.
-_GENERATED_DAG_SQL_DIR = "generated_sql"
+_GENERATED_DAG_SQL_DIR = "generated_sql/sfdc/cdc/sql_scripts"
 
 # Directory containing various template files.
 _TEMPLATE_DIR = Path(_THIS_DIR, "templates")
@@ -56,7 +58,7 @@ _TEMPLATE_DIR = Path(_THIS_DIR, "templates")
 _SQL_TEMPLATE_DIR = Path(_TEMPLATE_DIR, "sql")
 
 
-def process_table(table_setting, raw_project, raw_dataset, cdc_project,
+def process_table(bq_client, table_setting, project_id, raw_dataset,
                   cdc_dataset, load_test_data):
     """For a given table config, creates required tables as well as
     dag and related files. """
@@ -116,7 +118,7 @@ def process_table(table_setting, raw_project, raw_dataset, cdc_project,
     # Create CDC table if needed.
     #############################
     try:
-        create_cdc_table(table_setting, cdc_project, cdc_dataset,
+        create_cdc_table(bq_client, table_setting, project_id, cdc_dataset,
                          list(sfdc_to_bq_field_map.values()))
     except Exception as e:
         logging.error("Failed while processing table '%s'.\n"
@@ -124,16 +126,21 @@ def process_table(table_setting, raw_project, raw_dataset, cdc_project,
         raise SystemExit(
             "⛔️ Failed to deploy CDC. Please check the logs.") from e
 
+    generated_file_prefix = project_id + "_" + cdc_dataset + "_raw_to_cdc_"
+
     # Python file generation
     #########################
     python_template_file = Path(_TEMPLATE_DIR, "airflow_dag_raw_to_cdc.py")
-    output_py_file_name = (_GENERATED_FILE_PREFIX +
+    output_py_file_name = (generated_file_prefix +
                            base_table.replace(".", "_") + ".py")
     output_py_file = Path(_GENERATED_DAG_DIR, output_py_file_name)
 
     today = datetime.datetime.now()
     load_frequency = table_setting["load_frequency"]
     py_subs = {
+        "project_id": project_id,
+        "raw_dataset": raw_dataset,
+        "cdc_dataset": cdc_dataset,
         "base_table": base_table,
         "load_frequency": load_frequency,
         "year": today.year,
@@ -147,9 +154,9 @@ def process_table(table_setting, raw_project, raw_dataset, cdc_project,
 
     # SQL file generation
     #########################
-    sql_template_file_name = (_GENERATED_FILE_PREFIX + _TEMPLATE_SQL_NAME +
+    sql_template_file_name = (_TEMPLATE_FILE_PREFIX + _TEMPLATE_SQL_NAME +
                               ".sql")
-    sql_file_name = (_GENERATED_FILE_PREFIX + base_table.replace(".", "_") +
+    sql_file_name = (base_table.replace(".", "_") +
                      ".sql")
     sql_template_file = Path(_SQL_TEMPLATE_DIR, sql_template_file_name)
     output_sql_file = Path(_GENERATED_DAG_SQL_DIR, sql_file_name)
@@ -160,14 +167,14 @@ def process_table(table_setting, raw_project, raw_dataset, cdc_project,
     target_fields = [f"`{f[0]}`" for f in sfdc_to_bq_field_map.values()]
 
     sql_subs = {
-        "source_table": raw_project + "." + raw_dataset + "." + raw_table,
-        "target_table": cdc_project + "." + cdc_dataset + "." + base_table,
+        "source_table": project_id + "." + raw_dataset + "." + raw_table,
+        "target_table": project_id + "." + cdc_dataset + "." + base_table,
         "source_id": source_id_field_name,
         "target_id": id_field_name,
         "source_systemmodstamp": source_sms_field_name,
         "target_systemmodstamp": sms_field_name,
-        "target_fields": ",".join(target_fields),
-        "field_assignments": ",".join(field_assignments)
+        "target_fields": ",\n  ".join(target_fields),
+        "field_assignments": ",\n  ".join(field_assignments)
     }
 
     generate_file_from_template(sql_template_file, output_sql_file, **sql_subs)
@@ -177,7 +184,7 @@ def process_table(table_setting, raw_project, raw_dataset, cdc_project,
     # the RAW tables. Let's use the DAG SQL file to do that.
     if str(load_test_data).lower() == "true":
         try:
-            execute_sql_file(output_sql_file)
+            execute_sql_file(bq_client, output_sql_file)
             logging.info("Populated CDC table with test data.")
         except Exception as e:
             logging.error("Failed to populate CDC table '%s'.\n"
@@ -201,25 +208,23 @@ def main():
         json.dumps(config_dict, indent=4))
 
     # Read params from the config
-    raw_project = config_dict.get("projectIdSource")
+    project_id = config_dict.get("projectIdSource")
     raw_dataset = config_dict.get("SFDC").get("datasets").get("raw")
-    cdc_project = config_dict.get("projectIdSource")
     cdc_dataset = config_dict.get("SFDC").get("datasets").get("cdc")
     load_test_data = config_dict.get("testData")
 
     logging.info(
         "\n---------------------------------------\n"
         "Using the following parameters from config:\n"
-        "  raw_project = %s \n"
+        "  source_project = %s \n"
         "  raw_dataset = %s \n"
-        "  cdc_project = %s \n"
         "  cdc_dataset = %s \n"
         "  load_test_data = %s \n"
-        "---------------------------------------\n", raw_project, raw_dataset,
-        cdc_project, cdc_dataset, load_test_data)
+        "---------------------------------------\n", project_id, raw_dataset,
+        cdc_dataset, load_test_data)
 
-    Path(_GENERATED_DAG_DIR).mkdir(exist_ok=True)
-    Path(_GENERATED_DAG_SQL_DIR).mkdir(exist_ok=True)
+    Path(_GENERATED_DAG_DIR).mkdir(exist_ok=True, parents=True)
+    Path(_GENERATED_DAG_SQL_DIR).mkdir(exist_ok=True, parents=True)
 
     # Process tables based on table settings from settings file
     logging.info("Reading table settings...")
@@ -248,9 +253,11 @@ def main():
 
     logging.info("Processing tables...")
 
+    bq_client = bigquery.Client()
+
     table_settings = settings["raw_to_cdc_tables"]
     for table_setting in table_settings:
-        process_table(table_setting, raw_project, raw_dataset, cdc_project,
+        process_table(bq_client, table_setting, project_id, raw_dataset,
                       cdc_dataset, load_test_data)
 
     logging.info("Done generating CDC tables and DAGs.")

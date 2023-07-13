@@ -34,6 +34,13 @@ from airflow.operators.dummy_operator import DummyOperator
 from airflow.utils.state import State
 from airflow.utils.db import provide_session
 from airflow.version import version as AIRFLOW_VERSION
+from airflow.utils import timezone
+
+try:
+    from airflow.api.common.trigger_dag import trigger_dag
+except ImportError:
+    from airflow.api.common.experimental.trigger_dag import trigger_dag
+
 
 _RAW_WAITING_TIMEOUT_MINUTES = 10
 _RAW_AGE_HOURS_MAX = 12
@@ -46,20 +53,23 @@ default_args = {
     "retry_delay": timedelta(minutes=10),
 }
 
+_CDC_SQL_PATH = "sql_scripts/${base_table}.sql"
+_IDENTIFIER = "SFDC_${project_id}_${cdc_dataset}_raw_to_cdc_${base_table}"
+_RAW_DAG_ID = "SFDC_${project_id}_${raw_dataset}_extract_to_raw_${base_table}"
+
 
 @provide_session
 def check_raw_if_deployed(session=None, **kwargs):
     del kwargs
     now = Pendulum.now(UTC)
-    raw_dag_id = "SFDC_EXTRACT_TO_RAW_${base_table}"
 
-    active_runs = DagRun.find(dag_id=raw_dag_id, state=State.RUNNING)
+    active_runs = DagRun.find(dag_id=_RAW_DAG_ID, state=State.RUNNING)
     if active_runs and len(active_runs) > 0:
         logging.info("Rescheduling to wait for an active run of the Raw DAG.")
         raise AirflowRescheduleException(now + timedelta(
             minutes=_RAW_WAITING_TIMEOUT_MINUTES))
 
-    complete_runs: list[DagRun] = DagRun.find(dag_id=raw_dag_id,
+    complete_runs: list[DagRun] = DagRun.find(dag_id=_RAW_DAG_ID,
                                               state=State.SUCCESS)
     run_raw_now = True
     if complete_runs and len(complete_runs) > 0:
@@ -70,41 +80,45 @@ def check_raw_if_deployed(session=None, **kwargs):
 
     if run_raw_now:
         bag = DagBag()
-        raw_dag: DAG = bag.get_dag(raw_dag_id)
+        raw_dag: DAG = bag.get_dag(_RAW_DAG_ID)
         if not raw_dag:
-            logging.info("No Raw DAG %s found.", raw_dag_id)
+            logging.info("No Raw DAG %s found.", _RAW_DAG_ID)
             return
         logging.info("Starting a new run of the Raw DAG")
-        raw_dag.create_dagrun(run_id=f"forced_{now.isoformat()}",
-                              state=State.RUNNING,
-                              session=session)
+        trigger_dag(
+                dag_id=_RAW_DAG_ID,
+                run_id=f"forced__{now.isoformat()}",
+                conf=None,
+                execution_date=timezone.utcnow(),
+                replace_microseconds=False,
+            )
         logging.info("Rescheduling to wait for a new run of the Raw DAG.")
         raise AirflowRescheduleException(now + timedelta(
             minutes=_RAW_WAITING_TIMEOUT_MINUTES))
 
 
-with DAG(dag_id="SFDC_RAW_TO_CDC_${base_table}",
-         template_searchpath=["/home/airflow/gcs/data/bq_data_replication"],
+with DAG(dag_id=_IDENTIFIER,
          description=(
              "Merge from Salesforce RAW BQ dataset to CDC BQ dataset for "
-             "'${base_table}' table"),
+             "'${project_id}.${cdc_dataset}.${base_table}' table"),
          default_args=default_args,
          schedule_interval="${load_frequency}",
          catchup=False,
+         tags=["sfdc","cdc"],
          max_active_runs=1) as dag:
-    check_raw = PythonOperator(task_id="check_raw_${base_table}",
+    check_raw = PythonOperator(task_id="check_" + _RAW_DAG_ID,
                                python_callable=check_raw_if_deployed,
                                dag=dag)
     if AIRFLOW_VERSION.startswith("1."):
         copy_raw_to_cdc = BigQueryOperator(
-            task_id="copy_raw_to_cdc_${base_table}",
-            sql="sfdc_raw_to_cdc_${base_table}.sql",
+            task_id=_IDENTIFIER,
+            sql=_CDC_SQL_PATH,
             bigquery_conn_id="sfdc_cdc_bq",
             use_legacy_sql=False)
     else:
         copy_raw_to_cdc = BigQueryOperator(
-            task_id="copy_raw_to_cdc_${base_table}",
-            sql="sfdc_raw_to_cdc_${base_table}.sql",
+            task_id=_IDENTIFIER,
+            sql=_CDC_SQL_PATH,
             gcp_conn_id="sfdc_cdc_bq",
             use_legacy_sql=False)
     stop_task = DummyOperator(task_id="stop")

@@ -1,12 +1,10 @@
 {
     "testData": true,
-    "generateExtraData": true,
-    "deployCDC": true,
-    "deploySAP": true,
     "deploySFDC": true,
     "turboMode": true,
     "projectIdSource": "",
     "projectIdTarget": "",
+    "targetBucket": "",
     "location": "US",
     "languages": [
         "E",
@@ -16,7 +14,9 @@
         "USD"
     ],
     "SFDC": {
+        "deployCDC": true,
         "createMappingViews": true,
+        "createPlaceholders": true,
         "datasets": {
             "cdc": "",
             "raw": "",
