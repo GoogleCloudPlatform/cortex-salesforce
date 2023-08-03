@@ -195,6 +195,10 @@ def validate_partition_details(partition_details):
 def validate_table_setting(table_setting):
     """Makes sure the materializer setting for a table is valid."""
 
+    if not table_setting:
+        raise ValueError("Missing 'table_setting` section. This section is "
+                         "mandatory when BQ object type is 'table'.")
+
     logger.debug("table_settings :\n %s", table_setting)
 
     load_frequency = table_setting.get("load_frequency")

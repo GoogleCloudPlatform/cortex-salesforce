@@ -36,6 +36,8 @@ default_dag_args = {
 
 with airflow.DAG("${dag_full_name}",
                  default_args=default_dag_args,
+                 catchup=False,
+                 max_active_runs=1,
                  schedule_interval="${load_frequency}") as dag:
     start_task = DummyOperator(task_id="start")
     if AIRFLOW_VERSION.startswith("1."):

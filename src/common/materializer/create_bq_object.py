@@ -223,7 +223,7 @@ def _generate_dag_files(module_name: str, target_dataset_type: str,
 def _create_view(bq_client: bigquery.Client, view_name: str,
                  core_sql: str) -> None:
     """Creates BQ Reporting view."""
-    create_view_sql = ("CREATE OR REPLACE VIEW " + view_name + " AS (\n" +
+    create_view_sql = ("CREATE OR REPLACE VIEW `" + view_name + "` AS (\n" +
                        textwrap.indent(core_sql, "    ") + "\n)")
     create_view_job = bq_client.query(create_view_sql)
     _ = create_view_job.result()
@@ -250,7 +250,7 @@ def _create_table(bq_client: bigquery.Client, full_table_name: str,
     temp_table_name = full_table_name + "_temp"
     bq_client.delete_table(temp_table_name, not_found_ok=True)
     logging.info("Creating temporary table '%s'", temp_table_name)
-    temp_table_sql = ("CREATE TABLE " + temp_table_name + " AS (\n" +
+    temp_table_sql = ("CREATE TABLE `" + temp_table_name + "` AS (\n" +
                       "    SELECT * FROM (\n" +
                       textwrap.indent(sql_str, "        ") + "\n)\n" +
                       "    WHERE FALSE\n)")
@@ -290,8 +290,8 @@ def _generate_table_refresh_sql(bq_client: bigquery.Client,
     table_schema = bq_client.get_table(full_table_name).schema
     table_columns = [("`" + field.name + "`") for field in table_schema]
 
-    table_refresh_sql = ("TRUNCATE TABLE " + full_table_name + ";\n" +
-                         "INSERT INTO " + full_table_name + " (\n" +
+    table_refresh_sql = ("TRUNCATE TABLE `" + full_table_name + "`;\n" +
+                         "INSERT INTO `" + full_table_name + "` (\n" +
                          textwrap.indent(",\n".join(table_columns), "  ") +
                          "\n)\n" + sql_str + ";")
 
@@ -429,7 +429,9 @@ def main():
     if object_type == "script":
         logging.info("Executing script '%s'...", sql_file)
         try:
-            _ = bq_client.query(query=rendered_sql)
+            query_job = bq_client.query(query=rendered_sql)
+            # Wait for query to finish.
+            _ = query_job.result()
         except Exception as e:
             raise SystemExit("🛑 ERROR: Failed to run sql.\n"
                              "----\n"
