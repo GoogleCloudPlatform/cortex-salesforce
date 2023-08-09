@@ -49,8 +49,6 @@ SELECT
   Cases.LastModifiedDatestamp,
   Cases.LastReferencedDatestamp,
   Cases.LastViewedDatestamp,
-  Cases.SlaExitDatestamp,
-  Cases.SlaStartDatestamp,
   --## CORTEX-CUSTOMER Consider adding other dimensions from the CalendarDateDimension table as per your requirement
   DateDimensionCreatedDate.Date AS CaseCreatedDate,
   DateDimensionCreatedDate.CalWeek AS CaseCreatedWeek,

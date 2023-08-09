@@ -15,7 +15,6 @@
 
 SELECT
   Leads.LeadId,
-  Leads.AnnualRevenue,
   Leads.City,
   Leads.Company,
   Leads.ConvertedAccountId,
@@ -25,7 +24,6 @@ SELECT
   Leads.Country,
   Leads.CreatedById,
   Leads.CreatedDatestamp,
-  Leads.Description,
   Leads.Email,
   Leads.FirstName,
   Leads.GeocodeAccuracy,
@@ -47,7 +45,6 @@ SELECT
   Leads.Phone,
   Leads.PostalCode,
   Leads.Rating,
-  Leads.RecordTypeID,
   Leads.Salutation,
   Leads.State,
   Leads.Status,

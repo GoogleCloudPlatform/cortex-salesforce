@@ -1,10 +1,10 @@
 {
-    "testData": true,
+    "testData": false,
     "deploySFDC": true,
     "turboMode": true,
-    "projectIdSource": "",
-    "projectIdTarget": "",
-    "targetBucket": "",
+    "projectIdSource": "copel-cortex-salesforce",
+    "projectIdTarget": "copel-cortex-salesforce",
+    "targetBucket": "copel-dev-cortex-salesforce-dags",
     "location": "US",
     "languages": [
         "E",
@@ -18,9 +18,9 @@
         "createMappingViews": true,
         "createPlaceholders": true,
         "datasets": {
-            "cdc": "",
-            "raw": "",
-            "reporting": "REPORTING"
+            "cdc": "cdc_salesforce",
+            "raw": "raw_salesforce",
+            "reporting": "trusted_salesforce"
         }
     }
 }
