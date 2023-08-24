@@ -125,6 +125,33 @@ steps:
           fi
         fi
 
+  # Generate required K9 Processing tables in case they don't exist, so as not to break Reporting.
+  - name: 'gcr.io/kittycorn-public/deploy-kittycorn:v2.0'
+    entrypoint: /bin/bash
+    id: 'generate_k9_placeholder'
+    args:
+      - "-c"
+      - |-
+        echo "Creating placeholder K9 Processing tables in case they do not exist."
+        set -e
+        export PYTHONPATH=$$PYTHONPATH:./src
+
+        if [[ "${_TGT_BUCKET}" != "" ]]
+        then
+          _TGT_BUCKET_="${_TGT_BUCKET}"
+        else
+          _TGT_BUCKET_=$(jq -r ."targetBucket" "${_CONFIG_FILE}")
+        fi
+
+        src/common/materializer/deploy.sh \
+            --gcs_logs_bucket "${_GCS_BUCKET}" \
+            --gcs_tgt_bucket "$${_TGT_BUCKET_}" \
+            --module_name "k9" \
+            --target_type "processing" \
+            --config_file "${_CONFIG_FILE}" \
+            --materializer_settings_file config/k9_placeholder_settings.yaml
+        echo "✅ Placeholder K9 Processing tables have been created if they did not exist."
+
   # Generate SFDC Reporting bigquery views / tables via Materializer.
   - name: gcr.io/kittycorn-public/deploy-kittycorn:v2.0
     id: 'reporting'
