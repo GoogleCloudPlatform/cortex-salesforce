@@ -107,7 +107,7 @@ steps:
           else
             echo "🔪No Python files found under generated_dag/sfdc directory or the directory does not exist. Skipping copy.🔪"
           fi
-          if {{ "$${_DEPLOY_CDC_}" == "true" && "$${create_placeholder_tables}" == "true" }}
+          if [[ "$${_DEPLOY_CDC_}" == "true" && "$${create_placeholder_tables}" == "true" ]]
           then
             echo "Creating placeholder CDC tables / views in case they do not exist."
             set -e
