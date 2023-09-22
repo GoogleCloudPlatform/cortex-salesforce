@@ -36,7 +36,7 @@ from common.py_libs.dag_generator import generate_file_from_template
 _THIS_DIR = Path(__file__).resolve().parent
 
 # Config file containing various parameters.
-_CONFIG_FILE = Path(_THIS_DIR, "../../config/sfdc_config.json")
+_CONFIG_FILE = Path(_THIS_DIR, "../../config/config.json")
 
 # Settings file containing tables to be copied from SFDC.
 _SETTINGS_FILE = Path(_THIS_DIR, "../../config/ingestion_settings.yaml")

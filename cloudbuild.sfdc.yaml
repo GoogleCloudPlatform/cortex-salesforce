@@ -19,7 +19,7 @@ steps:
   # init_deployment_config.py leaves the validated config.json file in workspace/config so it's available for other build steps
   - name: gcr.io/kittycorn-public/deploy-kittycorn:v2.0
     entrypoint: "bash"
-    id: 'init_deploy_config'
+    id: "init_deploy_config"
     args:
       - "-c"
       - |-
@@ -35,7 +35,7 @@ steps:
         cat ${_CONFIG_FILE}
         echo -e "\n--------------------------------"
 
-  - name: 'gcr.io/kittycorn-public/deploy-kittycorn:v2.0'
+  - name: "gcr.io/kittycorn-public/deploy-kittycorn:v2.0"
     entrypoint: /bin/bash
     args:
       - "-c"
@@ -126,9 +126,9 @@ steps:
         fi
 
   # Generate required K9 Processing tables in case they don't exist, so as not to break Reporting.
-  - name: 'gcr.io/kittycorn-public/deploy-kittycorn:v2.0'
+  - name: "gcr.io/kittycorn-public/deploy-kittycorn:v2.0"
     entrypoint: /bin/bash
-    id: 'generate_k9_placeholder'
+    id: "generate_k9_placeholder"
     args:
       - "-c"
       - |-
@@ -154,7 +154,7 @@ steps:
 
   # Generate SFDC Reporting bigquery views / tables via Materializer.
   - name: gcr.io/kittycorn-public/deploy-kittycorn:v2.0
-    id: 'reporting'
+    id: "reporting"
     entrypoint: "bash"
     args:
       - "-c"
@@ -176,9 +176,11 @@ steps:
             --config_file "${_CONFIG_FILE}" \
             --materializer_settings_file config/reporting_settings.yaml
 
+        python3 src/common/annotations_loader.py --annotations-directory "src/annotations"
+
 logsBucket: "gs://$_GCS_BUCKET"
 timeout: 10200s
 substitutions:
-  _CONFIG_FILE: "config/sfdc_config.json"
+  _CONFIG_FILE: "config/config.json"
 options:
   substitution_option: "ALLOW_LOOSE"

@@ -1,0 +1,5 @@
+# - id: "{{ project_id_tgt }}.{{ sfdc_datasets_reporting }}.MyViewName"
+#   description: "View description goes here"
+#   fields:
+#     - name: "Field_Name"
+#       description: "Field description goes here"
