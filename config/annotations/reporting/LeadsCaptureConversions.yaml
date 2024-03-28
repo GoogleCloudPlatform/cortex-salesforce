@@ -1,5 +1,12 @@
 name: "{{ project_id_tgt }}.{{ sfdc_datasets_reporting }}.LeadsCaptureConversions"
 description: "Leads Conversion related metrics / calculations (New Leads,Conversion Trends, Performance by Sales Reps etc)."
+catalog_tags:
+  - display_name: "line_of_business"
+    fields:
+      - display_name: "group"
+        value: "Customer Relationship Management"
+      - display_name: "domain"
+        value: "Leads and Opportunity Management"
 fields:
   - name: "LeadId"
     description: "Lead ID"

@@ -1,5 +1,10 @@
 name: "{{ project_id_tgt }}.{{ sfdc_datasets_reporting }}.AccountsMD"
 description: "Accounts master data."
+catalog_tags:
+  - display_name: "line_of_business"
+    fields:
+      - display_name: "group"
+        value: "Master Data"
 fields:
   - name: "AccountId"
     description: "Account ID"

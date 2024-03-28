@@ -1,5 +1,12 @@
 name: "{{ project_id_tgt }}.{{ sfdc_datasets_reporting }}.Cases"
 description: "Cases data."
+catalog_tags:
+  - display_name: "line_of_business"
+    fields:
+      - display_name: "group"
+        value: "Customer Relationship Management"
+      - display_name: "domain"
+        value: "Case Management"
 fields:
   - name: "CaseId"
     description: "Case ID"

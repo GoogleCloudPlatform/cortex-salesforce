@@ -1,5 +1,12 @@
 name: "{{ project_id_tgt }}.{{ sfdc_datasets_reporting }}.OpportunityPipeline"
 description: "Opportunities Management metrics, forecasting calculations (Types of Opportunities, Status and performance etc)."
+catalog_tags:
+  - display_name: "line_of_business"
+    fields:
+      - display_name: "group"
+        value: "Customer Relationship Management"
+      - display_name: "domain"
+        value: "Leads and Opportunity Management"
 fields:
   - name: "OpportunityId"
     description: "Opportunity ID"

@@ -1,5 +1,12 @@
 name: "{{ project_id_tgt }}.{{ sfdc_datasets_reporting }}.SalesActivities"
 description: "Metrics focusing on monitoring and managing various activities (Tasks, Events) by the Sales team with follow ups, Customer engagement etc."
+catalog_tags:
+  - display_name: "line_of_business"
+    fields:
+      - display_name: "group"
+        value: "Customer Relationship Management"
+      - display_name: "domain"
+        value: "Leads and Opportunity Management"
 fields:
   - name: "AccountBillingCountry"
     description: "Billing Country for account"

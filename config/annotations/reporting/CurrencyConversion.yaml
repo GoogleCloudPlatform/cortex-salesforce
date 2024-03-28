@@ -1,5 +1,10 @@
 name: "{{ project_id_tgt }}.{{ sfdc_datasets_reporting }}.CurrencyConversion"
 description: "Currency conversion rates by date with source and target currencies."
+catalog_tags:
+  - display_name: "line_of_business"
+    fields:
+      - display_name: "group"
+        value: "Utility"
 fields:
   - name: "SourceCurrency"
     description: "Source currency."
