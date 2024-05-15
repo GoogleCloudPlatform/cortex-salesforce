@@ -13,6 +13,9 @@
 # limitations under the License.
 """ This module provides SFDC -> BigQuery extraction Airflow bootstrapper  """
 
+import os
+import configparser
+
 from google.cloud import bigquery
 
 from airflow.providers.google.cloud.hooks.bigquery import BigQueryHook
@@ -32,6 +35,12 @@ def extract_data_from_sfdc(
     output_table_name: str,
 ) -> None:
 
+    current_directory = os.path.dirname(os.path.realpath(__file__))
+
+    config = configparser.ConfigParser()
+    config.read(os.path.join(current_directory, "config.ini"))
+    text_encoding = config.get("sfdc2bq", "text_encoding")
+
     # Salesforce hook made with a connection or a secret
     sfdc_connection = SalesforceHook(sfdc_connection_id)
     # Simple-Salesforce connection
@@ -50,4 +59,5 @@ def extract_data_from_sfdc(
                       bq_client=bq_client,
                       project_id=project_id,
                       dataset_name=dataset_name,
-                      output_table_name=output_table_name)
+                      output_table_name=output_table_name,
+                      text_encoding=text_encoding)
