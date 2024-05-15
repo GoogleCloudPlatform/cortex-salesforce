@@ -42,6 +42,7 @@ class SalesforceToBigquery:
                   project_id: str,
                   dataset_name: str,
                   output_table_name: str,
+                  text_encoding: str,
                   include_non_standard_fields: typing.Union[
                       bool, typing.Iterable[str]] = False,
                   exclude_standard_fields: typing.Iterable[str] = None) -> None:
@@ -54,8 +55,9 @@ class SalesforceToBigquery:
             project_id (str): destination GCP project id
             dataset_name (str): destination dataset name
             output_table_name (str): destination table
-            include_non_standard_fields (bool, Iterable[str]|): whether to replicate
-                non-standard fields, True/False or a list of names
+            text_encoding (str): text encoding for SFDC text fields
+            include_non_standard_fields (bool, Iterable[str]|): whether to
+                replicate non-standard fields, True/False or a list of names
             exclude_standard_fields (Iterable[str]): list of standard fields
                 to exclude from replication
         """
@@ -63,6 +65,7 @@ class SalesforceToBigquery:
         logging.info(
             "Preparing Salesforce to BigQuery Replication: %s to %s.%s.%s.",
             api_name, project_id, dataset_name, output_table_name)
+        logging.info("Current encoding: %s", text_encoding)
         start_time = time.time()
 
         # Recordstamp is the start date/time of replication job.
@@ -72,8 +75,18 @@ class SalesforceToBigquery:
 
         logging.info("Retrieving and parsing source object description")
         desc = simple_sf_connection.restful(f"sobjects/{api_name}/describe/")
-        sfdc_fields = [(f["name"], f["type"].lower()) for f in desc["fields"]]
-        sfdc_field_names = [f["name"].lower() for f in desc["fields"]]
+        sfdc_fields = [(f["name"], f["type"].lower(), f["relationshipName"],
+                        f["referenceTo"])
+                       for f in desc["fields"]]  # type: ignore
+        # Handling polymorphic fields
+        # https://developer.salesforce.com/docs/atlas.en-us.soql_sosl.meta/soql_sosl/sforce_api_calls_soql_relationships_and_polymorph_keys.htm
+        relationship_type_fields = []
+        for f in sfdc_fields:
+            if f[2] and len(f[3]) > 1:
+                relationship_type_fields.append(
+                    (f"{f[2]}.Type", "string", "", []))
+        sfdc_fields.extend(relationship_type_fields)
+        sfdc_field_names = [f[0].lower() for f in sfdc_fields]
         has_system_mod_stamp = "systemmodstamp" in sfdc_field_names
         has_is_deleted = "isdeleted" in sfdc_field_names
         has_is_archived = "isarchived" in sfdc_field_names
@@ -151,7 +164,11 @@ class SalesforceToBigquery:
             if not target_type:
                 # not supported field type, most likely a compound
                 continue
-            sfdc_to_bq_field_map[f[0]] = (f[0], target_type)
+            # Fields mapping dictionary with original name as key and
+            # values as tuples of BQ field name and BQ type.
+            # Replacing dot with underscore in fields with names of polymorphic
+            # types.
+            sfdc_to_bq_field_map[f[0]] = (f[0].replace(".", "_"), target_type)
             source_fields.append(f[0])
 
         # sfdc_to_bq_field_map and source_fields are initialized at this point
@@ -194,10 +211,10 @@ class SalesforceToBigquery:
 
             # Starting a Bulk API 2.0 job.
             batches = SalesforceToBigquery._bulk_get_records(
-                simple_sf_connection, job_id)
+                simple_sf_connection, job_id, text_encoding)
 
             added_records = SalesforceToBigquery._upload_batches_to_bq(
-                bq, batches, sfdc_to_bq_field_map)
+                bq, batches, sfdc_to_bq_field_map, text_encoding)
 
             logging.info("Finalizing BigQuery resources.")
             bq.finish_ingestion(added_records == 0)
@@ -259,6 +276,7 @@ class SalesforceToBigquery:
     def _bulk_get_records(
         sfdc_connection: Salesforce,
         job_id: str,
+        text_encoding: str,
         job_status_interval: float = 10.0,
     ) -> typing.Iterable[typing.Iterable[str]]:
         """Retrieves CSV content of Salesforce Build API 2.0 query results
@@ -267,8 +285,7 @@ class SalesforceToBigquery:
         Args:
             sfdc_connection (Salesforce): Salesforce connection
             job_id (str): Salesforce Bulk API 2.0 job to retrieve results from
-            include_deleted (bool, optional): Whether to include
-                deleted records. Defaults to False.
+            text_encoding (str): Text encoding to use
             job_status_interval (float, optional): Job status polling interval
                 in seconds. Defaults to 10.0.
 
@@ -301,7 +318,9 @@ class SalesforceToBigquery:
         # Retrieve job results.
         while locator != "null":
             headers = sfdc_connection.headers.copy()
-            result_path = f"jobs/query/{job_id}/results?maxRecords={SalesforceToBigquery._MAX_RECORDS_PER_BULK_BATCH_}"
+            result_path = (
+                f"jobs/query/{job_id}/results?maxRecords="
+                f"{SalesforceToBigquery._MAX_RECORDS_PER_BULK_BATCH_}")
             if locator:
                 result_path += f"&locator={locator}"
             with sfdc_connection.session.request(
@@ -321,7 +340,8 @@ class SalesforceToBigquery:
                     # except when it's 404 and the locator is not None.
                     # It such cases, job has been deleted,
                     # and there is nothing more to get.
-                    if result_response.status_code == 404 and locator is not None:
+                    if (result_response.status_code == 404 and
+                            locator is not None):
                         logging.warning(
                             "⚠️ SFDC Bulk API 2.0 job %s was deleted.", job_id)
                         locator = "null"
@@ -337,7 +357,7 @@ class SalesforceToBigquery:
                         # because this is what's returned when the last set
                         # was retrieved in the multiple-batch situation.
                         locator = "null"
-                    result_response.encoding = 'utf-8'
+                    result_response.encoding = text_encoding
                     yield result_response.iter_content(
                         chunk_size=SalesforceToBigquery._CSV_STREAM_CHUNK_SIZE_,
                         decode_unicode=True)
@@ -376,11 +396,11 @@ class SalesforceToBigquery:
         return query
 
     @staticmethod
-    def _upload_batches_to_bq(
-        bq: BigQueryHelper,
-        batches: typing.Iterable[typing.Iterable[str]],
-        sfdc_to_bq_field_map: typing.Dict[str, typing.Tuple[str, str]],
-    ) -> int:
+    def _upload_batches_to_bq(bq: BigQueryHelper,
+                              batches: typing.Iterable[typing.Iterable[str]],
+                              sfdc_to_bq_field_map: typing.Dict[
+                                  str, typing.Tuple[str, str]],
+                              text_encoding: str) -> int:
         """Processes batches of Salesforce Bulk API 2.0 query.
         It retrieves CSV lines from the Bulk API batches,
         renames the header with the target names,
@@ -394,6 +414,7 @@ class SalesforceToBigquery:
                 generator returned by _bulk_get_records call.
             sfdc_to_bq_field_map (typing.Dict[str, typing.Tuple[str, str]]):
                 Salesforce-to-BigQuery field name mapping dictionary.
+            text_encoding: Text encoding to use.
 
         Returns:
             int: Number of added records.
@@ -409,7 +430,7 @@ class SalesforceToBigquery:
             logging.info("Working on batch %i", batch_count)
             with tempfile.NamedTemporaryFile(
                     "w",
-                    encoding="utf-8",
+                    encoding=text_encoding,
                     prefix=f"{bq.target_table_name}_",
                     suffix=".csv",
             ) as file:

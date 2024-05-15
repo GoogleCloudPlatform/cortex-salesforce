@@ -32,6 +32,7 @@ def sfdc2bq_replicate(
         project_id: str,
         dataset_name: str,
         output_table_name: str,
+        text_encoding: str,
         include_non_standard_fields: typing.Union[bool,
                                                   typing.Iterable[str]] = False,
         exclude_standard_fields: typing.Iterable[str] = None) -> None:
@@ -57,5 +58,6 @@ def sfdc2bq_replicate(
         project_id=project_id,
         dataset_name=dataset_name,
         output_table_name=output_table_name,
+        text_encoding=text_encoding,
         include_non_standard_fields=include_non_standard_fields,
         exclude_standard_fields=exclude_standard_fields)
