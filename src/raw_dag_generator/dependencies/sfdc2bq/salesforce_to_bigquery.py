@@ -337,6 +337,7 @@ class SalesforceToBigquery:
                         # because this is what's returned when the last set
                         # was retrieved in the multiple-batch situation.
                         locator = "null"
+                    result_response.encoding = 'utf-8'
                     yield result_response.iter_content(
                         chunk_size=SalesforceToBigquery._CSV_STREAM_CHUNK_SIZE_,
                         decode_unicode=True)
